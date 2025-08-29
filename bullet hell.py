@@ -33,6 +33,7 @@ class bullet_hell_game:
         self.star_bullets = []
         self.rect_bullets = []
         self.fast_bullets = []
+        self.egg_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
@@ -114,6 +115,12 @@ class bullet_hell_game:
             x = random.randint(0, 780)
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
             self.bullets.append(bullet)
+
+    def shoot_egg_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 40, fill="tan")
+            self.egg_bullets.append(bullet)
 
     def shoot_bullet2(self):
         if not self.game_over:
