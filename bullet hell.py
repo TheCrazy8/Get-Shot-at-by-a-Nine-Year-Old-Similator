@@ -15,6 +15,8 @@ class bullet_hell_game:
         self.boss_bullets = []
         self.zigzag_bullets = []
         self.fast_bullets = []
+        self.star_bullets = []
+        self.rect_bullets = []
         self.score = 0
         self.lives = 1
         self.game_over = False
@@ -22,6 +24,20 @@ class bullet_hell_game:
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
+
+    def shoot_star_bullet(self):
+        if not self.game_over:
+            x = random.randint(20, 760)
+            # Draw a star using create_polygon
+            points = [x, 0, x+10, 30, x+20, 0, x+5, 20, x+15, 20]
+            bullet = self.canvas.create_polygon(points, fill="magenta")
+            self.star_bullets.append(bullet)
+
+    def shoot_rect_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 740)
+            bullet = self.canvas.create_rectangle(x, 0, x+60, 15, fill="blue")
+            self.rect_bullets.append(bullet)
 
     def shoot_zigzag_bullet(self):
         if not self.game_over:
@@ -91,6 +107,8 @@ class bullet_hell_game:
             boss_chance = max(10, 100 - self.difficulty * 5)
             zigzag_chance = max(5, 60 - self.difficulty * 2)
             fast_chance = max(3, 30 - self.difficulty)
+            star_chance = max(8, 50 - self.difficulty * 2)
+            rect_chance = max(6, 40 - self.difficulty * 2)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -104,6 +122,10 @@ class bullet_hell_game:
                 self.shoot_zigzag_bullet()
             if random.randint(1, fast_chance) == 1:
                 self.shoot_fast_bullet()
+            if random.randint(1, star_chance) == 1:
+                self.shoot_star_bullet()
+            if random.randint(1, rect_chance) == 1:
+                self.shoot_rect_bullet()
 
             # Bullet speeds scale with difficulty
             bullet_speed = 10 + self.difficulty // 2
@@ -112,6 +134,8 @@ class bullet_hell_game:
             boss_speed = 15 + self.difficulty // 2
             zigzag_speed = 8 + self.difficulty // 3
             fast_speed = 20 + self.difficulty
+            star_speed = 12 + self.difficulty // 2
+            rect_speed = 14 + self.difficulty // 2
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
@@ -208,6 +232,34 @@ class bullet_hell_game:
                 elif self.canvas.coords(fast_bullet)[1] > 600:
                     self.canvas.delete(fast_bullet)
                     self.fast_bullets.remove(fast_bullet)
+                    self.score += 2
+
+            # Move star bullets
+            for star_bullet in self.star_bullets[:]:
+                self.canvas.move(star_bullet, 0, star_speed)
+                if self.check_collision(star_bullet):
+                    self.lives -= 1
+                    self.canvas.delete(star_bullet)
+                    self.star_bullets.remove(star_bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(star_bullet)[1] > 600:
+                    self.canvas.delete(star_bullet)
+                    self.star_bullets.remove(star_bullet)
+                    self.score += 3
+
+            # Move rectangle bullets
+            for rect_bullet in self.rect_bullets[:]:
+                self.canvas.move(rect_bullet, 0, rect_speed)
+                if self.check_collision(rect_bullet):
+                    self.lives -= 1
+                    self.canvas.delete(rect_bullet)
+                    self.rect_bullets.remove(rect_bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(rect_bullet)[1] > 600:
+                    self.canvas.delete(rect_bullet)
+                    self.rect_bullets.remove(rect_bullet)
                     self.score += 2
 
             self.root.after(50, self.update_game)
