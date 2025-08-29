@@ -61,3 +61,13 @@ class bullet_hell_game:
                 bullet_coords[0] < player_coords[2] and
                 bullet_coords[3] > player_coords[1] and
                 bullet_coords[1] < player_coords[3])
+
+    def end_game(self):
+        self.game_over = True
+        self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
+        self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = bullet_hell_game(root)
+    root.mainloop()
