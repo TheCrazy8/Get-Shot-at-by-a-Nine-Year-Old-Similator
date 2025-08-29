@@ -17,6 +17,8 @@ class bullet_hell_game:
         self.fast_bullets = []
         self.star_bullets = []
         self.rect_bullets = []
+        self.laser_indicators = []  # [(indicator_id, y, timer)]
+        self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
         self.lives = 1
         self.game_over = False
@@ -24,6 +26,12 @@ class bullet_hell_game:
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
+
+    def shoot_horizontal_laser(self):
+        if not self.game_over:
+            y = random.randint(50, 550)
+            indicator = self.canvas.create_line(0, y, 800, y, fill="red", dash=(5, 2), width=3)
+            self.laser_indicators.append((indicator, y, 30))  # 30 frames indicator
 
     def shoot_star_bullet(self):
         if not self.game_over:
@@ -109,6 +117,7 @@ class bullet_hell_game:
             fast_chance = max(6, 50 - self.difficulty)
             star_chance = max(16, 80 - self.difficulty * 2)
             rect_chance = max(12, 60 - self.difficulty * 2)
+            laser_chance = max(30, 120 - self.difficulty * 4)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -126,6 +135,41 @@ class bullet_hell_game:
                 self.shoot_star_bullet()
             if random.randint(1, rect_chance) == 1:
                 self.shoot_rect_bullet()
+            if random.randint(1, laser_chance) == 1:
+                self.shoot_horizontal_laser()
+            # Handle laser indicators
+            for indicator_tuple in self.laser_indicators[:]:
+                indicator_id, y, timer = indicator_tuple
+                timer -= 1
+                if timer <= 0:
+                    self.canvas.delete(indicator_id)
+                    # Spawn actual laser
+                    laser_id = self.canvas.create_line(0, y, 800, y, fill="red", width=8)
+                    self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
+                    self.laser_indicators.remove(indicator_tuple)
+                else:
+                    idx = self.laser_indicators.index(indicator_tuple)
+                    self.laser_indicators[idx] = (indicator_id, y, timer)
+
+            # Handle lasers
+            for laser_tuple in self.lasers[:]:
+                laser_id, y, timer = laser_tuple
+                timer -= 1
+                # Check collision with player
+                player_coords = self.canvas.coords(self.player)
+                if player_coords[1] <= y <= player_coords[3]:
+                    self.lives -= 1
+                    self.canvas.delete(laser_id)
+                    self.lasers.remove(laser_tuple)
+                    if self.lives <= 0:
+                        self.end_game()
+                    continue
+                if timer <= 0:
+                    self.canvas.delete(laser_id)
+                    self.lasers.remove(laser_tuple)
+                else:
+                    idx = self.lasers.index(laser_tuple)
+                    self.lasers[idx] = (laser_id, y, timer)
 
             # Bullet speeds scale with difficulty
             bullet_speed = 6 + self.difficulty // 2
