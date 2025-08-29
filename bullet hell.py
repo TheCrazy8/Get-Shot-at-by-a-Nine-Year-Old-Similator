@@ -8,7 +8,7 @@ class bullet_hell_game:
         self.root.title("Bullet Hell Game")
         self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
         self.canvas.pack()
-        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="blue")
+        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
         self.bullets = []
         self.bullets2 = []
         self.diag_bullets = []
