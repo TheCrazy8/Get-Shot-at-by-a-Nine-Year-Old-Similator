@@ -36,6 +36,12 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
             self.bullets.append(bullet)
 
+    def shoot_bullet2(self):
+        if not self.game_over:
+            y = random.randint(0, 780)
+            bullet = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
+            self.bullets.append(bullet)
+
     def update_game(self):
         if not self.game_over:
             if random.randint(1, 20) == 1:
