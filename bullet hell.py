@@ -6,9 +6,12 @@ class bullet_hell_game:
     def __init__(self, root):
         self.root = root
         self.root.title("Bullet Hell Game")
-        self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        self.root.geometry(f"{screen_width}x{screen_height}")
+        self.canvas = tk.Canvas(root, width=screen_width, height=screen_height, bg="black")
         self.canvas.pack()
-        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="blue")
+        self.player = self.canvas.create_rectangle(screen_width//2 - 10, screen_height - 50, screen_width//2 + 10, screen_height - 30, fill="blue")
         self.bullets = []
         self.bullets2 = []
         self.diag_bullets = []
@@ -18,6 +21,8 @@ class bullet_hell_game:
         self.score = 0
         self.lives = 1
         self.game_over = False
+        self.screen_width = screen_width
+        self.screen_height = screen_height
         self.root.bind("<KeyPress>", self.move_player)
         self.update_game()
 
