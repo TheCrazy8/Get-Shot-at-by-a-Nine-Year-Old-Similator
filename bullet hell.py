@@ -161,6 +161,7 @@ class bullet_hell_game:
             laser_chance = max(30, 120 - self.difficulty * 4)
             triangle_chance = max(10, 70 - self.difficulty * 2)
             quad_chance = max(8, 40 - self.difficulty)
+            egg_chance = max(10, 60 - self.difficulty * 2)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -245,6 +246,7 @@ class bullet_hell_game:
             star_speed = 7 + self.difficulty // 2
             rect_speed = 8 + self.difficulty // 2
             quad_speed = 6 + self.difficulty // 2
+            egg_speed = 5 + self.difficulty // 3
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
@@ -273,6 +275,20 @@ class bullet_hell_game:
                     self.canvas.delete(bullet2)
                     self.bullets2.remove(bullet2)
                     self.score += 1
+
+            # Move egg bullets
+            for egg_bullet in self.egg_bullets[:]:
+                self.canvas.move(egg_bullet, 0, egg_speed)
+                if self.check_collision(egg_bullet):
+                    self.lives -= 1
+                    self.canvas.delete(egg_bullet)
+                    self.egg_bullets.remove(egg_bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(egg_bullet)[1] > 600:
+                    self.canvas.delete(egg_bullet)
+                    self.egg_bullets.remove(egg_bullet)
+                    self.score += 2
 
             # Move diagonal bullets
             for bullet_tuple in self.diag_bullets[:]:
