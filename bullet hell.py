@@ -37,7 +37,9 @@ class bullet_hell_game:
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
+        self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
+        self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
