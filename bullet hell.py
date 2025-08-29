@@ -32,6 +32,7 @@ class bullet_hell_game:
         self.fast_bullets = []
         self.star_bullets = []
         self.rect_bullets = []
+        self.fast_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
@@ -41,6 +42,15 @@ class bullet_hell_game:
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
+
+    def shoot_quad_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            bullet1 = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
+            bullet2 = self.canvas.create_oval(x + 30, 0, x + 50, 20, fill="red")
+            bullet3 = self.canvas.create_oval(x + 60, 0, x + 80, 20, fill="red")
+            bullet4 = self.canvas.create_oval(x + 90, 0, x + 110, 20, fill="red")
+            self.bullets.extend([bullet1, bullet2, bullet3, bullet4])
 
     def shoot_triangle_bullet(self):
         if not self.game_over:
