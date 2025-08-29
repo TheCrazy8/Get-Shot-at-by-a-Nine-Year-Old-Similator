@@ -71,7 +71,7 @@ class bullet_hell_game:
                         self.end_game()
                 elif self.canvas.coords(bullet2)[1] > 600:
                     self.canvas.delete(bullet2)
-                    self.bullets.remove(bullet2)
+                    self.bullets2.remove(bullet2)
                     self.score += 1
             self.root.after(50, self.update_game)
 
