@@ -420,6 +420,7 @@ class bullet_hell_game:
         self.game_over = True
         self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
+        self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
 
 if __name__ == "__main__":
     root = tk.Tk()
