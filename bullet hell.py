@@ -149,6 +149,7 @@ class bullet_hell_game:
             if now - self.last_difficulty_increase > 100:
                 self.difficulty += 1
                 self.last_difficulty_increase = now
+            self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
 
             # Lower values mean higher spawn rate
             bullet_chance = max(4, 30 - self.difficulty)
