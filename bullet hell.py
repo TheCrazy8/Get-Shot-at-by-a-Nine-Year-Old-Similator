@@ -19,6 +19,8 @@ class bullet_hell_game:
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
+        self.difficulty = 1
+        self.last_difficulty_increase = time.time()
         self.update_game()
 
     def shoot_zigzag_bullet(self):
@@ -76,22 +78,44 @@ class bullet_hell_game:
 
     def update_game(self):
         if not self.game_over:
-            if random.randint(1, 20) == 1:
+            # Increase difficulty every 10 seconds
+            now = time.time()
+            if now - self.last_difficulty_increase > 10:
+                self.difficulty += 1
+                self.last_difficulty_increase = now
+
+            # Lower values mean higher spawn rate
+            bullet_chance = max(2, 20 - self.difficulty)
+            bullet2_chance = max(2, 20 - self.difficulty)
+            diag_chance = max(5, 40 - self.difficulty * 2)
+            boss_chance = max(10, 100 - self.difficulty * 5)
+            zigzag_chance = max(5, 60 - self.difficulty * 2)
+            fast_chance = max(3, 30 - self.difficulty)
+
+            if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
-            if random.randint(1, 20) == 1:
+            if random.randint(1, bullet2_chance) == 1:
                 self.shoot_bullet2()
-            if random.randint(1, 40) == 1:
+            if random.randint(1, diag_chance) == 1:
                 self.shoot_diag_bullet()
-            if random.randint(1, 100) == 1:
+            if random.randint(1, boss_chance) == 1:
                 self.shoot_boss_bullet()
-            if random.randint(1, 60) == 1:
+            if random.randint(1, zigzag_chance) == 1:
                 self.shoot_zigzag_bullet()
-            if random.randint(1, 30) == 1:
+            if random.randint(1, fast_chance) == 1:
                 self.shoot_fast_bullet()
+
+            # Bullet speeds scale with difficulty
+            bullet_speed = 10 + self.difficulty // 2
+            bullet2_speed = 10 + self.difficulty // 2
+            diag_speed = 7 + self.difficulty // 3
+            boss_speed = 15 + self.difficulty // 2
+            zigzag_speed = 8 + self.difficulty // 3
+            fast_speed = 20 + self.difficulty
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
-                self.canvas.move(bullet, 0, 10)
+                self.canvas.move(bullet, 0, bullet_speed)
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -105,7 +129,7 @@ class bullet_hell_game:
 
             # Move horizontal bullets
             for bullet2 in self.bullets2[:]:
-                self.canvas.move(bullet2, 10, 0)
+                self.canvas.move(bullet2, bullet2_speed, 0)
                 if self.check_collision(bullet2):
                     self.lives -= 1
                     self.canvas.delete(bullet2)
@@ -120,7 +144,7 @@ class bullet_hell_game:
             # Move diagonal bullets
             for bullet_tuple in self.diag_bullets[:]:
                 bullet, direction = bullet_tuple
-                self.canvas.move(bullet, 7 * direction, 7)
+                self.canvas.move(bullet, diag_speed * direction, diag_speed)
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -136,7 +160,7 @@ class bullet_hell_game:
 
             # Move boss bullets
             for boss_bullet in self.boss_bullets[:]:
-                self.canvas.move(boss_bullet, 0, 15)
+                self.canvas.move(boss_bullet, 0, boss_speed)
                 if self.check_collision(boss_bullet):
                     self.lives -= 1
                     self.canvas.delete(boss_bullet)
@@ -154,7 +178,7 @@ class bullet_hell_game:
                 # Change direction every 10 steps
                 if step_count % 10 == 0:
                     direction *= -1
-                self.canvas.move(bullet, 5 * direction, 8)
+                self.canvas.move(bullet, 5 * direction, zigzag_speed)
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -174,7 +198,7 @@ class bullet_hell_game:
 
             # Move fast bullets
             for fast_bullet in self.fast_bullets[:]:
-                self.canvas.move(fast_bullet, 0, 20)
+                self.canvas.move(fast_bullet, 0, fast_speed)
                 if self.check_collision(fast_bullet):
                     self.lives -= 1
                     self.canvas.delete(fast_bullet)
