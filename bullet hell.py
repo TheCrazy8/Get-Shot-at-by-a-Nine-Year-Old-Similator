@@ -153,6 +153,7 @@ class bullet_hell_game:
             rect_chance = max(12, 60 - self.difficulty * 2)
             laser_chance = max(30, 120 - self.difficulty * 4)
             triangle_chance = max(10, 70 - self.difficulty * 2)
+            quad_chance = max(8, 40 - self.difficulty)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -174,6 +175,8 @@ class bullet_hell_game:
                 self.shoot_horizontal_laser()
             if random.randint(1, triangle_chance) == 1:
                 self.shoot_triangle_bullet()
+            if random.randint(1, quad_chance) == 1:
+                self.shoot_quad_bullet()
             # Move triangle bullets
             triangle_speed = 7 + self.difficulty // 2
             for bullet_tuple in self.triangle_bullets[:]:
@@ -234,6 +237,7 @@ class bullet_hell_game:
             fast_speed = 12 + self.difficulty
             star_speed = 7 + self.difficulty // 2
             rect_speed = 8 + self.difficulty // 2
+            quad_speed = 6 + self.difficulty // 2
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
@@ -293,6 +297,20 @@ class bullet_hell_game:
                     self.canvas.delete(boss_bullet)
                     self.boss_bullets.remove(boss_bullet)
                     self.score += 5  # Boss bullets give more score
+
+            # Move quad bullets
+            for bullet in self.bullets[:]:
+                self.canvas.move(bullet, 0, quad_speed)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.bullets.remove(bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(bullet)[1] > 600:
+                    self.canvas.delete(bullet)
+                    self.bullets.remove(bullet)
+                    self.score += 2
 
             # Move zigzag bullets
             for bullet_tuple in self.zigzag_bullets[:]:
