@@ -21,7 +21,7 @@ class bullet_hell_game:
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
-        self.difficulty = 1
+        self.difficulty = 0
         self.last_difficulty_increase = time.time()
         self.update_game()
 
@@ -101,14 +101,14 @@ class bullet_hell_game:
                 self.last_difficulty_increase = now
 
             # Lower values mean higher spawn rate
-            bullet_chance = max(2, 20 - self.difficulty)
-            bullet2_chance = max(2, 20 - self.difficulty)
-            diag_chance = max(5, 40 - self.difficulty * 2)
-            boss_chance = max(10, 100 - self.difficulty * 5)
-            zigzag_chance = max(5, 60 - self.difficulty * 2)
-            fast_chance = max(3, 30 - self.difficulty)
-            star_chance = max(8, 50 - self.difficulty * 2)
-            rect_chance = max(6, 40 - self.difficulty * 2)
+            bullet_chance = max(4, 30 - self.difficulty)
+            bullet2_chance = max(4, 30 - self.difficulty)
+            diag_chance = max(10, 60 - self.difficulty * 2)
+            boss_chance = max(20, 150 - self.difficulty * 5)
+            zigzag_chance = max(10, 80 - self.difficulty * 2)
+            fast_chance = max(6, 50 - self.difficulty)
+            star_chance = max(16, 80 - self.difficulty * 2)
+            rect_chance = max(12, 60 - self.difficulty * 2)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -128,14 +128,14 @@ class bullet_hell_game:
                 self.shoot_rect_bullet()
 
             # Bullet speeds scale with difficulty
-            bullet_speed = 10 + self.difficulty // 2
-            bullet2_speed = 10 + self.difficulty // 2
-            diag_speed = 7 + self.difficulty // 3
-            boss_speed = 15 + self.difficulty // 2
-            zigzag_speed = 8 + self.difficulty // 3
-            fast_speed = 20 + self.difficulty
-            star_speed = 12 + self.difficulty // 2
-            rect_speed = 14 + self.difficulty // 2
+            bullet_speed = 6 + self.difficulty // 2
+            bullet2_speed = 6 + self.difficulty // 2
+            diag_speed = 4 + self.difficulty // 3
+            boss_speed = 8 + self.difficulty // 2
+            zigzag_speed = 5 + self.difficulty // 3
+            fast_speed = 12 + self.difficulty
+            star_speed = 7 + self.difficulty // 2
+            rect_speed = 8 + self.difficulty // 2
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
