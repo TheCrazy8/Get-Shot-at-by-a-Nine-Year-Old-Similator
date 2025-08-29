@@ -11,6 +11,8 @@ class bullet_hell_game:
         self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="blue")
         self.bullets = []
         self.bullets2 = []
+        self.diag_bullets = []
+        self.boss_bullets = []
         self.score = 0
         self.lives = 1
         self.game_over = False
@@ -43,13 +45,32 @@ class bullet_hell_game:
             bullet2 = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
             self.bullets2.append(bullet2)
 
+    def shoot_diag_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            direction = random.choice([1, -1])  # 1 for right-down, -1 for left-down
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
+            self.diag_bullets.append((bullet, direction))
+
+    def shoot_boss_bullet(self):
+        if not self.game_over:
+            x = random.randint(200, 600)
+            bullet = self.canvas.create_oval(x, 0, x + 40, 40, fill="purple")
+            self.boss_bullets.append(bullet)
+
     def update_game(self):
         if not self.game_over:
             if random.randint(1, 20) == 1:
                 self.shoot_bullet()
-            elif random.randint(1, 20) == 1:
+            if random.randint(1, 20) == 1:
                 self.shoot_bullet2()
-            for bullet in self.bullets:
+            if random.randint(1, 40) == 1:
+                self.shoot_diag_bullet()
+            if random.randint(1, 100) == 1:
+                self.shoot_boss_bullet()
+
+            # Move vertical bullets
+            for bullet in self.bullets[:]:
                 self.canvas.move(bullet, 0, 10)
                 if self.check_collision(bullet):
                     self.lives -= 1
@@ -61,7 +82,9 @@ class bullet_hell_game:
                     self.canvas.delete(bullet)
                     self.bullets.remove(bullet)
                     self.score += 1
-            for bullet2 in self.bullets2:
+
+            # Move horizontal bullets
+            for bullet2 in self.bullets2[:]:
                 self.canvas.move(bullet2, 10, 0)
                 if self.check_collision(bullet2):
                     self.lives -= 1
@@ -69,10 +92,42 @@ class bullet_hell_game:
                     self.bullets2.remove(bullet2)
                     if self.lives <= 0:
                         self.end_game()
-                elif self.canvas.coords(bullet2)[1] > 600:
+                elif self.canvas.coords(bullet2)[0] > 800:
                     self.canvas.delete(bullet2)
                     self.bullets2.remove(bullet2)
                     self.score += 1
+
+            # Move diagonal bullets
+            for bullet_tuple in self.diag_bullets[:]:
+                bullet, direction = bullet_tuple
+                self.canvas.move(bullet, 7 * direction, 7)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.diag_bullets.remove(bullet_tuple)
+                    if self.lives <= 0:
+                        self.end_game()
+                else:
+                    coords = self.canvas.coords(bullet)
+                    if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
+                        self.canvas.delete(bullet)
+                        self.diag_bullets.remove(bullet_tuple)
+                        self.score += 1
+
+            # Move boss bullets
+            for boss_bullet in self.boss_bullets[:]:
+                self.canvas.move(boss_bullet, 0, 15)
+                if self.check_collision(boss_bullet):
+                    self.lives -= 1
+                    self.canvas.delete(boss_bullet)
+                    self.boss_bullets.remove(boss_bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(boss_bullet)[1] > 600:
+                    self.canvas.delete(boss_bullet)
+                    self.boss_bullets.remove(boss_bullet)
+                    self.score += 5  # Boss bullets give more score
+
             self.root.after(50, self.update_game)
 
     def check_collision(self, bullet):
