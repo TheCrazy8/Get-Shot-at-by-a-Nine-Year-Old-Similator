@@ -13,11 +13,27 @@ class bullet_hell_game:
         self.bullets2 = []
         self.diag_bullets = []
         self.boss_bullets = []
+        self.zigzag_bullets = []
+        self.fast_bullets = []
         self.score = 0
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
         self.update_game()
+
+    def shoot_zigzag_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="cyan")
+            # Zigzag state: (bullet, direction, step_count)
+            direction = random.choice([1, -1])
+            self.zigzag_bullets.append((bullet, direction, 0))
+
+    def shoot_fast_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
+            self.fast_bullets.append(bullet)
 
     def move_player(self, event):
         if event.keysym == 'Left' and not self.game_over:
@@ -68,6 +84,10 @@ class bullet_hell_game:
                 self.shoot_diag_bullet()
             if random.randint(1, 100) == 1:
                 self.shoot_boss_bullet()
+            if random.randint(1, 60) == 1:
+                self.shoot_zigzag_bullet()
+            if random.randint(1, 30) == 1:
+                self.shoot_fast_bullet()
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
@@ -127,6 +147,44 @@ class bullet_hell_game:
                     self.canvas.delete(boss_bullet)
                     self.boss_bullets.remove(boss_bullet)
                     self.score += 5  # Boss bullets give more score
+
+            # Move zigzag bullets
+            for bullet_tuple in self.zigzag_bullets[:]:
+                bullet, direction, step_count = bullet_tuple
+                # Change direction every 10 steps
+                if step_count % 10 == 0:
+                    direction *= -1
+                self.canvas.move(bullet, 5 * direction, 8)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.zigzag_bullets.remove(bullet_tuple)
+                    if self.lives <= 0:
+                        self.end_game()
+                else:
+                    coords = self.canvas.coords(bullet)
+                    if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
+                        self.canvas.delete(bullet)
+                        self.zigzag_bullets.remove(bullet_tuple)
+                        self.score += 2
+                    else:
+                        # Update tuple with incremented step_count and possibly new direction
+                        idx = self.zigzag_bullets.index(bullet_tuple)
+                        self.zigzag_bullets[idx] = (bullet, direction, step_count + 1)
+
+            # Move fast bullets
+            for fast_bullet in self.fast_bullets[:]:
+                self.canvas.move(fast_bullet, 0, 20)
+                if self.check_collision(fast_bullet):
+                    self.lives -= 1
+                    self.canvas.delete(fast_bullet)
+                    self.fast_bullets.remove(fast_bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(fast_bullet)[1] > 600:
+                    self.canvas.delete(fast_bullet)
+                    self.fast_bullets.remove(fast_bullet)
+                    self.score += 2
 
             self.root.after(50, self.update_game)
 
