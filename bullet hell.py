@@ -21,7 +21,7 @@ class bullet_hell_game:
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
-        self.difficulty = 0
+        self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
 
