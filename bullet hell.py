@@ -23,6 +23,12 @@ class bullet_hell_game:
         elif event.keysym == 'Right' and not self.game_over:
             if self.canvas.coords(self.player)[2] < 800:
                 self.canvas.move(self.player, 20, 0)
+        elif event.keysym == 'Up' and not self.game_over:
+            if self.canvas.coords(self.player)[1] > 0:
+                self.canvas.move(self.player, 0, -20)
+        elif event.keysym == 'Down' and not self.game_over:
+            if self.canvas.coords(self.player)[3] < 600:
+                self.canvas.move(self.player, 0, 20)
 
     def shoot_bullet(self):
         if not self.game_over:
