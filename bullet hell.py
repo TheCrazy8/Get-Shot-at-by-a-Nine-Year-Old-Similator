@@ -148,12 +148,11 @@ class bullet_hell_game:
         if not self.game_over:
             # Increase difficulty every 100 seconds
             now = time.time()
-            self.timee = int(now)
             if now - self.last_difficulty_increase > 100:
                 self.difficulty += 1
                 self.last_difficulty_increase = now
             self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
-            self.canvas.itemconfig(self.timecount, text=f"Time: {self.timee}")
+            self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
 
             # Lower values mean higher spawn rate
             bullet_chance = max(4, 30 - self.difficulty)
