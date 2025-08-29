@@ -1,1 +1,57 @@
+import tkinter as tk
+import random
+import time
 
+class bullet_hell_game:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Bullet Hell Game")
+        self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
+        self.canvas.pack()
+        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="blue")
+        self.bullets = []
+        self.score = 0
+        self.lives = 3
+        self.game_over = False
+        self.root.bind("<KeyPress>", self.move_player)
+        self.update_game()
+
+    def move_player(self, event):
+        if event.keysym == 'Left' and not self.game_over:
+            if self.canvas.coords(self.player)[0] > 0:
+                self.canvas.move(self.player, -20, 0)
+        elif event.keysym == 'Right' and not self.game_over:
+            if self.canvas.coords(self.player)[2] < 800:
+                self.canvas.move(self.player, 20, 0)
+
+    def shoot_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
+            self.bullets.append(bullet)
+
+    def update_game(self):
+        if not self.game_over:
+            if random.randint(1, 20) == 1:
+                self.shoot_bullet()
+            for bullet in self.bullets:
+                self.canvas.move(bullet, 0, 10)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.bullets.remove(bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(bullet)[1] > 600:
+                    self.canvas.delete(bullet)
+                    self.bullets.remove(bullet)
+                    self.score += 1
+            self.root.after(50, self.update_game)
+
+    def check_collision(self, bullet):
+        bullet_coords = self.canvas.coords(bullet)
+        player_coords = self.canvas.coords(self.player)
+        return (bullet_coords[2] > player_coords[0] and
+                bullet_coords[0] < player_coords[2] and
+                bullet_coords[3] > player_coords[1] and
+                bullet_coords[1] < player_coords[3])
