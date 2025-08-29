@@ -25,6 +25,7 @@ class bullet_hell_game:
         self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
         self.bullets = []
         self.bullets2 = []
+        self.triangle_bullets = []  # [(bullet_id, direction)]
         self.diag_bullets = []
         self.boss_bullets = []
         self.zigzag_bullets = []
@@ -40,6 +41,15 @@ class bullet_hell_game:
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
+
+    def shoot_triangle_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, 780)
+            direction = random.choice([1, -1])
+            # Draw triangle using create_polygon
+            points = [x, 0, x+20, 0, x+10, 20]
+            bullet = self.canvas.create_polygon(points, fill="#bfff00")
+            self.triangle_bullets.append((bullet, direction))
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
@@ -132,6 +142,7 @@ class bullet_hell_game:
             star_chance = max(16, 80 - self.difficulty * 2)
             rect_chance = max(12, 60 - self.difficulty * 2)
             laser_chance = max(30, 120 - self.difficulty * 4)
+            triangle_chance = max(10, 70 - self.difficulty * 2)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -151,6 +162,25 @@ class bullet_hell_game:
                 self.shoot_rect_bullet()
             if random.randint(1, laser_chance) == 1:
                 self.shoot_horizontal_laser()
+            if random.randint(1, triangle_chance) == 1:
+                self.shoot_triangle_bullet()
+            # Move triangle bullets
+            triangle_speed = 7 + self.difficulty // 2
+            for bullet_tuple in self.triangle_bullets[:]:
+                bullet, direction = bullet_tuple
+                self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.triangle_bullets.remove(bullet_tuple)
+                    if self.lives <= 0:
+                        self.end_game()
+                else:
+                    coords = self.canvas.coords(bullet)
+                    if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
+                        self.canvas.delete(bullet)
+                        self.triangle_bullets.remove(bullet_tuple)
+                        self.score += 2
             # Handle laser indicators
             for indicator_tuple in self.laser_indicators[:]:
                 indicator_id, y, timer = indicator_tuple
