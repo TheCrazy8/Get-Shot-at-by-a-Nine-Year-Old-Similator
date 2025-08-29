@@ -10,6 +10,7 @@ class bullet_hell_game:
         self.canvas.pack()
         self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="blue")
         self.bullets = []
+        self.bullets2 = []
         self.score = 0
         self.lives = 3
         self.game_over = False
@@ -40,7 +41,7 @@ class bullet_hell_game:
         if not self.game_over:
             y = random.randint(0, 780)
             bullet = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
-            self.bullets.append(bullet)
+            self.bullets2.append(bullet)
 
     def update_game(self):
         if not self.game_over:
@@ -54,6 +55,18 @@ class bullet_hell_game:
                     self.lives -= 1
                     self.canvas.delete(bullet)
                     self.bullets.remove(bullet)
+                    if self.lives <= 0:
+                        self.end_game()
+                elif self.canvas.coords(bullet)[1] > 600:
+                    self.canvas.delete(bullet)
+                    self.bullets.remove(bullet)
+                    self.score += 1
+            for bullet in self.bullets2:
+                self.canvas.move(bullet, 10, 0)
+                if self.check_collision(bullet):
+                    self.lives -= 1
+                    self.canvas.delete(bullet)
+                    self.bullets2.remove(bullet)
                     if self.lives <= 0:
                         self.end_game()
                 elif self.canvas.coords(bullet)[1] > 600:
