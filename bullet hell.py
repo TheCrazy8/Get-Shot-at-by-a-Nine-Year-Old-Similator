@@ -46,6 +46,8 @@ class bullet_hell_game:
         if not self.game_over:
             if random.randint(1, 20) == 1:
                 self.shoot_bullet()
+            elif random.randint(1, 20) == 1:
+                self.shoot_bullet2()
             for bullet in self.bullets:
                 self.canvas.move(bullet, 0, 10)
                 if self.check_collision(bullet):
