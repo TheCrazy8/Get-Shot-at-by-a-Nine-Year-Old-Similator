@@ -1,9 +1,23 @@
 import tkinter as tk
 import random
 import time
+import pygame
+import sys
+import os
 
 class bullet_hell_game:
     def __init__(self, root):
+        # Initialize pygame mixer and play music
+        pygame.mixer.init()
+        try:
+            if hasattr(sys, '_MEIPASS'):
+                music_path = os.path.join(sys._MEIPASS, "music.mp3")
+            else:
+                music_path = "music.mp3"
+            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+        except Exception as e:
+            print("Could not play music:", e)
         self.root = root
         self.root.title("Bullet Hell Game")
         self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
