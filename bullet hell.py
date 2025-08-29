@@ -12,7 +12,7 @@ class bullet_hell_game:
         self.bullets = []
         self.bullets2 = []
         self.score = 0
-        self.lives = 3
+        self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
         self.update_game()
