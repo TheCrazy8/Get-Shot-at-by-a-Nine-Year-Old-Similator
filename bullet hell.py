@@ -23,6 +23,7 @@ class bullet_hell_game:
         self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
         self.canvas.pack()
         self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
+        self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
