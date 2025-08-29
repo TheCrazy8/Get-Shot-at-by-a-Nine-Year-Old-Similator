@@ -40,8 +40,8 @@ class bullet_hell_game:
     def shoot_bullet2(self):
         if not self.game_over:
             y = random.randint(0, 780)
-            bullet = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
-            self.bullets2.append(bullet)
+            bullet2 = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
+            self.bullets2.append(bullet2)
 
     def update_game(self):
         if not self.game_over:
@@ -61,17 +61,17 @@ class bullet_hell_game:
                     self.canvas.delete(bullet)
                     self.bullets.remove(bullet)
                     self.score += 1
-            for bullet in self.bullets2:
-                self.canvas.move(bullet, 10, 0)
-                if self.check_collision(bullet):
+            for bullet2 in self.bullets2:
+                self.canvas.move(bullet2, 10, 0)
+                if self.check_collision(bullet2):
                     self.lives -= 1
-                    self.canvas.delete(bullet)
-                    self.bullets2.remove(bullet)
+                    self.canvas.delete(bullet2)
+                    self.bullets2.remove(bullet2)
                     if self.lives <= 0:
                         self.end_game()
-                elif self.canvas.coords(bullet)[1] > 600:
-                    self.canvas.delete(bullet)
-                    self.bullets.remove(bullet)
+                elif self.canvas.coords(bullet2)[1] > 600:
+                    self.canvas.delete(bullet2)
+                    self.bullets.remove(bullet2)
                     self.score += 1
             self.root.after(50, self.update_game)
 
