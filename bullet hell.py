@@ -78,9 +78,9 @@ class bullet_hell_game:
 
     def update_game(self):
         if not self.game_over:
-            # Increase difficulty every 10 seconds
+            # Increase difficulty every 100 seconds
             now = time.time()
-            if now - self.last_difficulty_increase > 10:
+            if now - self.last_difficulty_increase > 100:
                 self.difficulty += 1
                 self.last_difficulty_increase = now
 
