@@ -550,7 +550,10 @@ class bullet_hell_game:
         ei = self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         er = self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         we = self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
-        time.sleep(1)
+        egg = 10
+        while egg != 0:
+            egg -= 1
+            pass
         self.canvas.delete(ei)
         self.canvas.delete(er)
         self.canvas.delete(we)
