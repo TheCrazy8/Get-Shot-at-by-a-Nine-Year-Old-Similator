@@ -547,7 +547,7 @@ class bullet_hell_game:
     def end_game(self):
         self.game_over = True
         self.gamerunning = False
-        self.delete("all")
+        self.root.destroy()
         self.__init__(self.root)
 
 if __name__ == "__main__":
