@@ -42,9 +42,16 @@ class bullet_hell_game:
         self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.lives = 1
         self.game_over = False
-        self.root.bind("<KeyPress>", self.move_player)
+        self.root.bind("<KeyPress>", self.on_key_press)
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
+
+        # Dialog system
+        self.dialog_list = []  # List of dialog strings
+        self.dialog_index = 0
+        self.dialog_active = False
+        self.dialog_box = None
+        self.dialog_text = None
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -99,6 +106,14 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
             self.fast_bullets.append(bullet)
 
+    def on_key_press(self, event):
+        # Dialog navigation
+        if self.dialog_active:
+            if event.keysym == 'space':
+                self.next_dialog()
+            return
+        self.move_player(event)
+
     def move_player(self, event):
         if event.keysym == 'Left' and not self.game_over:
             if self.canvas.coords(self.player)[0] > 0:
@@ -112,6 +127,51 @@ class bullet_hell_game:
         elif event.keysym == 'Down' and not self.game_over:
             if self.canvas.coords(self.player)[3] < 600:
                 self.canvas.move(self.player, 0, 20)
+
+    def show_dialog(self, dialog_list):
+        """
+        Call this method with a list of strings to display dialog.
+        Example: self.show_dialog(["Hello!", "Welcome to Bullet Hell."])
+        """
+        if not dialog_list:
+            return
+        self.dialog_list = dialog_list
+        self.dialog_index = 0
+        self.dialog_active = True
+        self.display_dialog_box()
+
+    def display_dialog_box(self):
+        # Remove previous dialog box if exists
+        if self.dialog_box:
+            self.canvas.delete(self.dialog_box)
+        if self.dialog_text:
+            self.canvas.delete(self.dialog_text)
+        # Draw dialog box (semi-transparent rectangle)
+        self.dialog_box = self.canvas.create_rectangle(100, 450, 700, 590, fill="#222", outline="white", width=3)
+        # Draw dialog text
+        text = self.dialog_list[self.dialog_index]
+        self.dialog_text = self.canvas.create_text(400, 520, text=text, fill="white", font=("Arial", 18), width=580)
+        # Draw prompt
+        self.dialog_prompt = self.canvas.create_text(400, 570, text="[Space] Next", fill="#aaa", font=("Arial", 12))
+
+    def next_dialog(self):
+        self.dialog_index += 1
+        if self.dialog_index >= len(self.dialog_list):
+            self.close_dialog()
+        else:
+            self.display_dialog_box()
+
+    def close_dialog(self):
+        self.dialog_active = False
+        if self.dialog_box:
+            self.canvas.delete(self.dialog_box)
+            self.dialog_box = None
+        if self.dialog_text:
+            self.canvas.delete(self.dialog_text)
+            self.dialog_text = None
+        if hasattr(self, 'dialog_prompt') and self.dialog_prompt:
+            self.canvas.delete(self.dialog_prompt)
+            self.dialog_prompt = None
 
     def shoot_bullet(self):
         if not self.game_over:
@@ -145,6 +205,10 @@ class bullet_hell_game:
             self.boss_bullets.append(bullet)
 
     def update_game(self):
+        # Pause game updates if dialog is active
+        if self.dialog_active:
+            self.root.after(50, self.update_game)
+            return
         if not self.game_over:
             # Increase difficulty every 100 seconds
             now = time.time()
@@ -256,6 +320,9 @@ class bullet_hell_game:
             # Move vertical bullets
             for bullet in self.bullets[:]:
                 self.canvas.move(bullet, 0, bullet_speed)
+                # TP Grazing check
+                if self.check_graze(bullet):
+                    self.score += 1
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -270,6 +337,8 @@ class bullet_hell_game:
             # Move horizontal bullets
             for bullet2 in self.bullets2[:]:
                 self.canvas.move(bullet2, bullet2_speed, 0)
+                if self.check_graze(bullet2):
+                    self.score += 1
                 if self.check_collision(bullet2):
                     self.lives -= 1
                     self.canvas.delete(bullet2)
@@ -284,6 +353,8 @@ class bullet_hell_game:
             # Move egg bullets
             for egg_bullet in self.egg_bullets[:]:
                 self.canvas.move(egg_bullet, 0, egg_speed)
+                if self.check_graze(egg_bullet):
+                    self.score += 1
                 if self.check_collision(egg_bullet):
                     self.lives -= 1
                     self.canvas.delete(egg_bullet)
@@ -299,6 +370,8 @@ class bullet_hell_game:
             for bullet_tuple in self.diag_bullets[:]:
                 bullet, direction = bullet_tuple
                 self.canvas.move(bullet, diag_speed * direction, diag_speed)
+                if self.check_graze(bullet):
+                    self.score += 1
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -315,6 +388,8 @@ class bullet_hell_game:
             # Move boss bullets
             for boss_bullet in self.boss_bullets[:]:
                 self.canvas.move(boss_bullet, 0, boss_speed)
+                if self.check_graze(boss_bullet):
+                    self.score += 2  # Boss bullets give more TP
                 if self.check_collision(boss_bullet):
                     self.lives -= 1
                     self.canvas.delete(boss_bullet)
@@ -329,6 +404,8 @@ class bullet_hell_game:
             # Move quad bullets
             for bullet in self.bullets[:]:
                 self.canvas.move(bullet, 0, quad_speed)
+                if self.check_graze(bullet):
+                    self.score += 1
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -347,6 +424,8 @@ class bullet_hell_game:
                 if step_count % 10 == 0:
                     direction *= -1
                 self.canvas.move(bullet, 5 * direction, zigzag_speed)
+                if self.check_graze(bullet):
+                    self.score += 1
                 if self.check_collision(bullet):
                     self.lives -= 1
                     self.canvas.delete(bullet)
@@ -367,6 +446,8 @@ class bullet_hell_game:
             # Move fast bullets
             for fast_bullet in self.fast_bullets[:]:
                 self.canvas.move(fast_bullet, 0, fast_speed)
+                if self.check_graze(fast_bullet):
+                    self.score += 1
                 if self.check_collision(fast_bullet):
                     self.lives -= 1
                     self.canvas.delete(fast_bullet)
@@ -381,6 +462,8 @@ class bullet_hell_game:
             # Move star bullets
             for star_bullet in self.star_bullets[:]:
                 self.canvas.move(star_bullet, 0, star_speed)
+                if self.check_graze(star_bullet):
+                    self.score += 1
                 if self.check_collision(star_bullet):
                     self.lives -= 1
                     self.canvas.delete(star_bullet)
@@ -395,6 +478,8 @@ class bullet_hell_game:
             # Move rectangle bullets
             for rect_bullet in self.rect_bullets[:]:
                 self.canvas.move(rect_bullet, 0, rect_speed)
+                if self.check_graze(rect_bullet):
+                    self.score += 1
                 if self.check_collision(rect_bullet):
                     self.lives -= 1
                     self.canvas.delete(rect_bullet)
@@ -405,8 +490,26 @@ class bullet_hell_game:
                     self.canvas.delete(rect_bullet)
                     self.rect_bullets.remove(rect_bullet)
                     self.score += 2
-
             self.root.after(50, self.update_game)
+
+
+    def check_graze(self, bullet):
+        """
+        Returns True if player is close to the bullet (grazing), but not colliding.
+        """
+        bullet_coords = self.canvas.coords(bullet)
+        player_coords = self.canvas.coords(self.player)
+        # If already colliding, not grazing
+        if self.check_collision(bullet):
+            return False
+        # Calculate closest distance between player and bullet
+        px = (player_coords[0] + player_coords[2]) / 2
+        py = (player_coords[1] + player_coords[3]) / 2
+        bx = (bullet_coords[0] + bullet_coords[2]) / 2
+        by = (bullet_coords[1] + bullet_coords[3]) / 2
+        dist = ((px - bx) ** 2 + (py - by) ** 2) ** 0.5
+        return dist < self.graze_distance
+
 
     def check_collision(self, bullet):
         bullet_coords = self.canvas.coords(bullet)
@@ -425,4 +528,10 @@ class bullet_hell_game:
 if __name__ == "__main__":
     root = tk.Tk()
     game = bullet_hell_game(root)
+    # Example usage: show dialog at start
+    game.show_dialog([
+        "Welcome to Bullet Hell!",
+        "Use arrow keys to move.",
+        "Avoid the bullets and survive as long as you can!"
+    ])
     root.mainloop()
