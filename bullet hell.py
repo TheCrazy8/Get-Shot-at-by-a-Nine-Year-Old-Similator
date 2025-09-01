@@ -38,6 +38,7 @@ class bullet_hell_game:
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
+        self.gamerunning = False
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
@@ -139,6 +140,7 @@ class bullet_hell_game:
         self.dialog_list = dialog_list
         self.dialog_index = 0
         self.dialog_active = True
+        self.gamerunning = False
         self.display_dialog_box()
 
     def display_dialog_box(self):
@@ -173,6 +175,7 @@ class bullet_hell_game:
         if hasattr(self, 'dialog_prompt') and self.dialog_prompt:
             self.canvas.delete(self.dialog_prompt)
             self.dialog_prompt = None
+            self.gamerunning = True
         self.update_game()
 
     def shoot_bullet(self):
@@ -212,14 +215,14 @@ class bullet_hell_game:
             self.root.after(50, self.update_game)
             return
         if not self.game_over:
-            # Increase difficulty every 100 seconds
-            now = time.time()
-            if now - self.last_difficulty_increase > 100:
-                self.difficulty += 1
-                self.last_difficulty_increase = now
-            self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
-            self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
-
+            if self.gamerunning:
+                # Increase difficulty every 100 seconds
+                now = time.time()
+                if now - self.last_difficulty_increase > 100:
+                    self.difficulty += 1
+                    self.last_difficulty_increase = now
+                self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
+                self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
             # Lower values mean higher spawn rate
             bullet_chance = max(4, 30 - self.difficulty)
             bullet2_chance = max(4, 30 - self.difficulty)
