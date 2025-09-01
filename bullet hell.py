@@ -549,7 +549,8 @@ class bullet_hell_game:
         self.gamerunning = False
         self.show_dialog(["Game Over!", "Your score: " + str(self.score), "Time survived: " + str(int(time.time() - self.timee)) + " seconds"])
         self.root.destroy()
-        self.__init__(self.root)
+    python = sys.executable
+    os.execl(python, python, *sys.argv) # Re-execute the script
 
 if __name__ == "__main__":
     root = tk.Tk()
