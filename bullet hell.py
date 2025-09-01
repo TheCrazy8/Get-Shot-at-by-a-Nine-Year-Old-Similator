@@ -27,6 +27,16 @@ class bullet_hell_game:
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
         self.diag_bullets = []
+        self.dialog_gmindex = -1
+        self.dialognext = ["Yeah if you couldn't tell, this isn't like Touhou.",
+                           "Because, well, Touhou is finite, and this, well, isn't.",
+                           "And guess what?",
+                           "It's not like undertale either.",
+                           "Because you can't fight back!!!",
+                           "Uhh- good luck.",
+                           "...",
+                           ". . .",
+                           "I've run out of funny references."]
         self.boss_bullets = []
         self.zigzag_bullets = []
         self.fast_bullets = []
@@ -129,6 +139,20 @@ class bullet_hell_game:
         elif event.keysym == 'Down' and not self.game_over:
             if self.canvas.coords(self.player)[3] < 600:
                 self.canvas.move(self.player, 0, 20)
+
+    def restart_game(self, event):
+        if event.keysym == 'r':
+            self.restartdialog()
+
+    def restartdialog(self):
+        self.game_over = False
+        self.lives = 1
+        self.score = 0
+        self.timee = int(time.time())
+        self.difficulty = 1
+        self.dialog_gmindex += 1
+        self.show_dialog([self.dialognext[self.dialog_gmindex]])
+        self.update_game()
 
     def show_dialog(self, dialog_list):
         """
@@ -535,8 +559,8 @@ if __name__ == "__main__":
     game = bullet_hell_game(root)
     # Example usage: show dialog at start
     game.show_dialog([
-        "Welcome to Bullet Hell!",
+        "Welcome to My Lair!",
         "Use arrow keys to move.",
-        "Avoid the bullets and survive as long as you can!"
+        "Avoid my attacks and survive as long as you can!"
     ])
     root.mainloop()
