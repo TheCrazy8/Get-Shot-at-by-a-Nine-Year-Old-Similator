@@ -546,9 +546,11 @@ class bullet_hell_game:
 
     def end_game(self):
         self.game_over = True
+        self.gamerunning = False
         ei = self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         er = self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         we = self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        time.sleep(10)
         self.canvas.delete(ei)
         self.canvas.delete(er)
         self.canvas.delete(we)
