@@ -547,7 +547,7 @@ class bullet_hell_game:
     def end_game(self):
         self.game_over = True
         self.gamerunning = False
-        self.show_dialog(["Game Over!", "Your score: " + str(self.score)])
+        self.show_dialog(["Game Over!", "Your score: " + str(self.score), "Time survived: " + str(int(time.time() - self.timee)) + " seconds"])
         self.root.destroy()
         self.__init__(self.root)
 
