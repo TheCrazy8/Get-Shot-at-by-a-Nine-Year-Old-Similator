@@ -55,8 +55,6 @@ class bullet_hell_game:
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.on_key_press)
-        self.difficulty = 1
-        self.last_difficulty_increase = time.time()
 
         # Dialog system
         self.dialog_list = []  # List of dialog strings
@@ -150,7 +148,6 @@ class bullet_hell_game:
         self.lives = 1
         self.score = 0
         self.timee = int(time.time())
-        self.difficulty = 1
         self.dialog_gmindex += 1
         self.show_dialog([self.dialognext[self.dialog_gmindex]])
         self.difficulty = 1
@@ -244,26 +241,23 @@ class bullet_hell_game:
             return
         if not self.game_over:
             if self.gamerunning:
-                # Increase difficulty every 100 seconds
+                # Increase every 100 seconds
                 now = time.time()
-                if now - self.last_difficulty_increase > 100:
-                    self.difficulty += 1
-                    self.last_difficulty_increase = now
                 self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
                 self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
             # Lower values mean higher spawn rate
-            bullet_chance = max(4, 30 - self.difficulty)
-            bullet2_chance = max(4, 30 - self.difficulty)
-            diag_chance = max(10, 60 - self.difficulty * 2)
-            boss_chance = max(20, 150 - self.difficulty * 5)
-            zigzag_chance = max(10, 80 - self.difficulty * 2)
-            fast_chance = max(6, 50 - self.difficulty)
-            star_chance = max(16, 80 - self.difficulty * 2)
-            rect_chance = max(12, 60 - self.difficulty * 2)
-            laser_chance = max(30, 120 - self.difficulty * 4)
-            triangle_chance = max(10, 70 - self.difficulty * 2)
-            quad_chance = max(8, 40 - self.difficulty)
-            egg_chance = max(10, 60 - self.difficulty * 2)
+            bullet_chance = max(4, 30)
+            bullet2_chance = max(4, 30)
+            diag_chance = max(10, 60)
+            boss_chance = max(20, 150)
+            zigzag_chance = max(10, 80)
+            fast_chance = max(6, 50)
+            star_chance = max(16, 80)
+            rect_chance = max(12, 60)
+            laser_chance = max(30, 120)
+            triangle_chance = max(10, 70)
+            quad_chance = max(8, 40)
+            egg_chance = max(10, 60)
 
             if random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
@@ -288,7 +282,7 @@ class bullet_hell_game:
             if random.randint(1, quad_chance) == 1:
                 self.shoot_quad_bullet()
             # Move triangle bullets
-            triangle_speed = 7 + self.difficulty // 2
+            triangle_speed = 7
             for bullet_tuple in self.triangle_bullets[:]:
                 bullet, direction = bullet_tuple
                 self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
@@ -338,17 +332,17 @@ class bullet_hell_game:
                     idx = self.lasers.index(laser_tuple)
                     self.lasers[idx] = (laser_id, y, timer)
 
-            # Bullet speeds scale with difficulty
-            bullet_speed = 6 + self.difficulty // 2
-            bullet2_speed = 6 + self.difficulty // 2
-            diag_speed = 4 + self.difficulty // 3
-            boss_speed = 8 + self.difficulty // 2
-            zigzag_speed = 5 + self.difficulty // 3
-            fast_speed = 12 + self.difficulty
-            star_speed = 7 + self.difficulty // 2
-            rect_speed = 8 + self.difficulty // 2
-            quad_speed = 6 + self.difficulty // 2
-            egg_speed = 5 + self.difficulty // 3
+            # Bullet speeds
+            bullet_speed = 6
+            bullet2_speed = 6
+            diag_speed = 4
+            boss_speed = 8
+            zigzag_speed = 5
+            fast_speed = 12
+            star_speed = 7
+            rect_speed = 82
+            quad_speed = 6
+            egg_speed = 5
 
             # Move vertical bullets
             for bullet in self.bullets[:]:
