@@ -147,11 +147,8 @@ class bullet_hell_game:
         self.game_over = False
         self.lives = 1
         self.score = 0
-        self.timee = int(time.time())
         self.dialog_gmindex += 1
         self.show_dialog([self.dialognext[self.dialog_gmindex]])
-        self.difficulty = 1
-        self.last_difficulty_increase = time.time()
         self.gamerunning = True
         self.update_game()
 
