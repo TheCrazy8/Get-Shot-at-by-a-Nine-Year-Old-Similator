@@ -145,6 +145,7 @@ class bullet_hell_game:
             self.restartdialog()
 
     def restartdialog(self):
+        self.gamerunning = False
         self.game_over = False
         self.lives = 1
         self.score = 0
@@ -152,6 +153,9 @@ class bullet_hell_game:
         self.difficulty = 1
         self.dialog_gmindex += 1
         self.show_dialog([self.dialognext[self.dialog_gmindex]])
+        self.difficulty = 1
+        self.last_difficulty_increase = time.time()
+        self.gamerunning = True
         self.update_game()
 
     def show_dialog(self, dialog_list):
@@ -550,9 +554,13 @@ class bullet_hell_game:
 
     def end_game(self):
         self.game_over = True
-        self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
-        self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
-        self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        ei = self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
+        er = self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
+        we = self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        self.canvas.remove(ei)
+        self.canvas.remove(er)
+        self.canvas.remove(we)
+        self.root.bind("<KeyPress>", self.restart_game)
         self.restartdialog()
 
 if __name__ == "__main__":
