@@ -172,6 +172,7 @@ class bullet_hell_game:
         if hasattr(self, 'dialog_prompt') and self.dialog_prompt:
             self.canvas.delete(self.dialog_prompt)
             self.dialog_prompt = None
+        self.update_game()
 
     def shoot_bullet(self):
         if not self.game_over:
