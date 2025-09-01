@@ -44,7 +44,7 @@ class bullet_hell_game:
         self.rect_bullets = []
         self.fast_bullets = []
         self.egg_bullets = []
-        self.graze_distance = 15  # Distance for TP grazing
+        self.graze_distance = 150  # Distance for TP grazing
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
@@ -553,6 +553,7 @@ class bullet_hell_game:
         self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        self.restartdialog()
 
 if __name__ == "__main__":
     root = tk.Tk()
