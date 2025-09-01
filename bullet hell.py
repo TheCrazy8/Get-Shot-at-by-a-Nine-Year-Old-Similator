@@ -34,6 +34,7 @@ class bullet_hell_game:
         self.rect_bullets = []
         self.fast_bullets = []
         self.egg_bullets = []
+        self.graze_distance = 15  # Distance for TP grazing
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
