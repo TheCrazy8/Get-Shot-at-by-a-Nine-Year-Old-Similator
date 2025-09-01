@@ -340,7 +340,7 @@ class bullet_hell_game:
             zigzag_speed = 5
             fast_speed = 12
             star_speed = 7
-            rect_speed = 82
+            rect_speed = 8
             quad_speed = 6
             egg_speed = 5
 
@@ -551,10 +551,9 @@ class bullet_hell_game:
         ei = self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         er = self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         we = self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
-        self.canvas.remove(ei)
-        self.canvas.remove(er)
-        self.canvas.remove(we)
-        self.root.bind("<KeyPress>", self.restart_game)
+        self.canvas.delete(ei)
+        self.canvas.delete(er)
+        self.canvas.delete(we)
         self.restartdialog()
 
 if __name__ == "__main__":
