@@ -191,7 +191,7 @@ class bullet_hell_game:
             "The person making the game may or may not be a nine year old.",
             "Yes im self aware, and will actively break the 4th wall.",
             ":)",
-            "I could really go for some applesauce... \n Or corpses..."
+            "\n I could really go for some applesauce... \n Or corpses..."
         ]
         return random.choice(dialogs)
 
