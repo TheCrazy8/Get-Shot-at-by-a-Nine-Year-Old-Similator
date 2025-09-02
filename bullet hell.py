@@ -40,6 +40,7 @@ class bullet_hell_game:
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        self.dialog = self.canvas.create_text(400, 20, text=get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
@@ -64,6 +65,21 @@ class bullet_hell_game:
             points = [x, 0, x+20, 0, x+10, 20]
             bullet = self.canvas.create_polygon(points, fill="#bfff00")
             self.triangle_bullets.append((bullet, direction))
+
+    def get_dialog_string(self):
+        dialogs = [
+            "Welcome to Bullet Hell!",
+            "Dodge the bullets and survive as long as you can!",
+            "Use arrow keys to move your ship.",
+            "Good luck, and have fun!",
+            "The bullets are getting faster!",
+            "Stay sharp, the challenge increases!",
+            "Can you beat your high score?",
+            "Keep going, you're doing great!",
+            "Watch out for the lasers!",
+            "Every second counts in Bullet Hell!"
+        ]
+        return random.choice(dialogs)
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
