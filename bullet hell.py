@@ -294,9 +294,7 @@ class bullet_hell_game:
             cx + self.grazing_radius, cy + self.grazing_radius,
             outline="white", dash=(5, 5), width=2
         )
-        # Remove after 200ms
-        self.root.after(200, lambda: self.canvas.delete(self.graze_effect_id))
-        self.graze_effect_id = None
+        self.graze_effect_timer = 4  # Number of update cycles to show (200ms)
 
     def check_graze(self, bullet):
         # Returns True if bullet grazes player (close but not colliding)
@@ -305,8 +303,15 @@ class bullet_hell_game:
         px1, py1, px2, py2 = player_coords
         cx = (px1 + px2) / 2
         cy = (py1 + py2) / 2
-        bx = (bullet_coords[0] + bullet_coords[2]) / 2
-        by = (bullet_coords[1] + bullet_coords[3]) / 2
+        # Handle polygons (coords > 4)
+        if len(bullet_coords) > 4:
+            xs = bullet_coords[::2]
+            ys = bullet_coords[1::2]
+            bx = sum(xs) / len(xs)
+            by = sum(ys) / len(ys)
+        else:
+            bx = (bullet_coords[0] + bullet_coords[2]) / 2
+            by = (bullet_coords[1] + bullet_coords[3]) / 2
         dist = ((cx - bx) ** 2 + (cy - by) ** 2) ** 0.5
         # Not colliding, but within grazing radius
         if dist < self.grazing_radius + 10 and not self.check_collision(bullet):
@@ -318,6 +323,20 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        # Move graze effect to follow player if active
+        if self.graze_effect_id:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            self.canvas.coords(
+                self.graze_effect_id,
+                cx - self.grazing_radius, cy - self.grazing_radius,
+                cx + self.grazing_radius, cy + self.grazing_radius
+            )
+            self.graze_effect_timer -= 1
+            if self.graze_effect_timer <= 0:
+                self.canvas.delete(self.graze_effect_id)
+                self.graze_effect_id = None
         # Increase difficulty every 60 seconds
         now = time.time()
         if now - self.last_difficulty_increase > 60:
