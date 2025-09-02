@@ -214,9 +214,9 @@ class bullet_hell_game:
 
     def update_game(self):
         if not self.game_over:
-            # Increase difficulty every 100 seconds
+            # Increase difficulty every 60 seconds
             now = time.time()
-            if now - self.last_difficulty_increase > 100:
+            if now - self.last_difficulty_increase > 60:
                 self.difficulty += 1
                 self.last_difficulty_increase = now
                 self.canvas.itemconfig(self.dialog, text=self.get_dialog_string())
