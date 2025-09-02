@@ -357,7 +357,7 @@ class bullet_hell_game:
             if timer <= 0:
                 self.canvas.delete(indicator_id)
                 # Spawn actual laser
-                laser_id = self.canvas.create_line(0, y, 800, y, fill="red", width=8)
+                laser_id = self.canvas.create_line(0, y, self.width, y, fill="red", width=8)
                 self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
                 self.laser_indicators.remove(indicator_tuple)
             else:
