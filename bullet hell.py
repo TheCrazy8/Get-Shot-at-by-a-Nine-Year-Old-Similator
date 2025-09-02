@@ -264,8 +264,8 @@ class bullet_hell_game:
         if not self.game_over:
             x = random.randint(0, 780)
             direction = random.choice([1, -1])  # 1 for right-down, -1 for left-down
-            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
-            self.diag_bullets.append((bullet, direction))
+            dbullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
+            self.diag_bullets.append((dbullet, direction))
 
     def shoot_boss_bullet(self):
         if not self.game_over:
@@ -433,18 +433,18 @@ class bullet_hell_game:
                 self.score += 2
 
         # Move diagonal bullets
-        for bullet in self.diag_bullets[:]:
-            bullet, direction = bullet
-            self.canvas.move(bullet, diag_speed * direction, diag_speed)
-            if self.check_collision(bullet):
+        for dbullet in self.diag_bullets[:]:
+            dbullet, direction = dbullet
+            self.canvas.move(dbullet, diag_speed * direction, diag_speed)
+            if self.check_collision(dbullet):
                 self.lives -= 1
-                self.canvas.delete(bullet)
-                self.diag_bullets.remove(bullet)
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(dbullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(bullet)[1] > 600:
-                self.canvas.delete(bullet)
-                self.diag_bullets.remove(bullet)
+            elif self.canvas.coords(dbullet)[1] > 600:
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(dbullet)
                 self.score += 2
 
         # Move boss bullets
