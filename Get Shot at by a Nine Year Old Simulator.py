@@ -211,6 +211,7 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
         else:
             self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
+        return self.dial
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
@@ -373,7 +374,7 @@ class bullet_hell_game:
         if now - self.lastdial > 15:
             self.get_dialog_string()
             self.lastdial = now
-            self.canvas.itemconfig(self.dialog, text=self.get_dialog_string())
+            self.canvas.itemconfig(self.dialog, text=self.dial())
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
 
