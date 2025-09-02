@@ -47,6 +47,7 @@ class bullet_hell_game:
         self.pause_text = None
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
+        self.root.bind("<Escape>", self.toggle_pause)
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
@@ -299,12 +300,11 @@ class bullet_hell_game:
             if self.check_collision(bullet):
                 self.lives -= 1
                 self.canvas.delete(bullet)
-            self.paused = False
-            self.pause_text = None
-            self.triangle_bullets.remove(bullet_tuple)
-            self.root.bind("<Escape>", self.toggle_pause)
-            if self.lives <= 0:
-                self.end_game()
+                self.paused = False
+                self.pause_text = None
+                self.triangle_bullets.remove(bullet_tuple)
+                if self.lives <= 0:
+                    self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
                 if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
