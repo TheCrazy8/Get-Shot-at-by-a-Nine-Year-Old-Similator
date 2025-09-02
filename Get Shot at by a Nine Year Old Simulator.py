@@ -200,7 +200,10 @@ class bullet_hell_game:
             "\n Never gonna give you up,\n never gonna let you down.",
             "Who gave me a GUN?",
             "Blep",
-            "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter."
+            "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter.",
+            "Alt F4 for instant win.",
+            "Prepare to be overstimulated!",
+            "Immortality sucks-."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
