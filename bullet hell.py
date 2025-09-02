@@ -194,6 +194,8 @@ class bullet_hell_game:
             "\n I could really go for some applesauce... \n Or corpses...",
             "U just got beat up by a girl!",
             "Smug colon-three",
+            "Get dunked on!!!",
+            "\nNever gonna give you up,\n never gonna let you down."
 
         ]
         self.dial=random.choice(dialogs)
@@ -201,6 +203,10 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, fill="red")
         else:
             self.canvas.itemconfig(self.dialog, fill="white")
+        if self.dial == "\nNever gonna give you up,\n never gonna let you down.":
+            self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
+        else:
+            self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
         return self.dial
 
     def shoot_horizontal_laser(self):
