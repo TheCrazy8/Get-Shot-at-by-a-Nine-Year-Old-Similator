@@ -197,7 +197,10 @@ class bullet_hell_game:
             "U just got beat up by a girl!",
             "Smug colon-three",
             "Get dunked on!!!",
-            "\nNever gonna give you up,\n never gonna let you down."
+            "\n Never gonna give you up,\n never gonna let you down.",
+            "Who gave me a GUN?",
+            "Blep",
+            "\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
