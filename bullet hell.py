@@ -20,9 +20,13 @@ class bullet_hell_game:
             print("Could not play music:", e)
         self.root = root
         self.root.title("Bullet Hell Game")
-        self.canvas = tk.Canvas(root, width=800, height=600, bg="black")
-        self.canvas.pack()
-        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
+        self.root.state('zoomed')  # Maximize window (Windows only)
+        self.root.update_idletasks()
+        self.width = self.root.winfo_width()
+        self.height = self.root.winfo_height()
+        self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, bg="black")
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
@@ -39,8 +43,8 @@ class bullet_hell_game:
         self.score = 0
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
-        self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(400, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
+        self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
         self.lives = 1
         self.game_over = False
         self.paused = False
@@ -49,6 +53,7 @@ class bullet_hell_game:
         self.last_difficulty_increase = time.time()
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
+        self.root.bind("r", self.restart_game)
         self.update_game()
 
     def restart_game(self, event=None):
@@ -58,7 +63,7 @@ class bullet_hell_game:
         for item in self.canvas.find_all():
             self.canvas.delete(item)
         # Reset all game state
-        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
+        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []
@@ -75,8 +80,8 @@ class bullet_hell_game:
         self.score = 0
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
-        self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(400, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
+        self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
         self.lives = 1
         self.game_over = False
         self.paused = False
@@ -87,7 +92,7 @@ class bullet_hell_game:
 
     def shoot_quad_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             bullet1 = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
             bullet2 = self.canvas.create_oval(x + 30, 0, x + 50, 20, fill="red")
             bullet3 = self.canvas.create_oval(x + 60, 0, x + 80, 20, fill="red")
@@ -96,7 +101,7 @@ class bullet_hell_game:
 
     def shoot_triangle_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             direction = random.choice([1, -1])
             # Draw triangle using create_polygon
             points = [x, 0, x+20, 0, x+10, 20]
@@ -180,13 +185,13 @@ class bullet_hell_game:
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
-            y = random.randint(50, 550)
+            y = random.randint(50, self.height-50)
             indicator = self.canvas.create_line(0, y, 800, y, fill="red", dash=(5, 2), width=3)
             self.laser_indicators.append((indicator, y, 30))  # 30 frames indicator
 
     def shoot_star_bullet(self):
         if not self.game_over:
-            x = random.randint(20, 760)
+            x = random.randint(20, self.width-40)
             # Draw a star using create_polygon
             points = [x, 0, x+10, 30, x+20, 0, x+5, 20, x+15, 20]
             bullet = self.canvas.create_polygon(points, fill="magenta")
@@ -194,13 +199,13 @@ class bullet_hell_game:
 
     def shoot_rect_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 740)
+            x = random.randint(0, self.width-60)
             bullet = self.canvas.create_rectangle(x, 0, x+60, 15, fill="blue")
             self.rect_bullets.append(bullet)
 
     def shoot_zigzag_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="cyan")
             # Zigzag state: (bullet, direction, step_count)
             direction = random.choice([1, -1])
@@ -208,7 +213,7 @@ class bullet_hell_game:
 
     def shoot_fast_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
             self.fast_bullets.append(bullet)
 
@@ -219,13 +224,13 @@ class bullet_hell_game:
             if self.canvas.coords(self.player)[0] > 0:
                 self.canvas.move(self.player, -20, 0)
         elif event.keysym == 'Right':
-            if self.canvas.coords(self.player)[2] < 800:
+            if self.canvas.coords(self.player)[2] < self.width:
                 self.canvas.move(self.player, 20, 0)
         elif event.keysym == 'Up':
             if self.canvas.coords(self.player)[1] > 0:
                 self.canvas.move(self.player, 0, -20)
         elif event.keysym == 'Down':
-            if self.canvas.coords(self.player)[3] < 600:
+            if self.canvas.coords(self.player)[3] < self.height:
                 self.canvas.move(self.player, 0, 20)
 
     def toggle_pause(self, event=None):
@@ -234,7 +239,7 @@ class bullet_hell_game:
         self.paused = not self.paused
         if self.paused:
             if not self.pause_text:
-                self.pause_text = self.canvas.create_text(400, 300, text="Paused", fill="yellow", font=("Arial", 40))
+                self.pause_text = self.canvas.create_text(self.width//2, self.height//2, text="Paused", fill="yellow", font=("Arial", 40))
         else:
             if self.pause_text:
                 self.canvas.delete(self.pause_text)
@@ -245,32 +250,32 @@ class bullet_hell_game:
 
     def shoot_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
             self.bullets.append(bullet)
 
     def shoot_egg_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 20, 40, fill="tan")
             self.egg_bullets.append(bullet)
 
     def shoot_bullet2(self):
         if not self.game_over:
-            y = random.randint(0, 780)
+            y = random.randint(0, self.height-20)
             bullet2 = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
             self.bullets2.append(bullet2)
 
     def shoot_diag_bullet(self):
         if not self.game_over:
-            x = random.randint(0, 780)
+            x = random.randint(0, self.width-20)
             direction = random.choice([1, -1])  # 1 for right-down, -1 for left-down
             dbullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
             self.diag_bullets.append((dbullet, direction))
 
     def shoot_boss_bullet(self):
         if not self.game_over:
-            x = random.randint(200, 600)
+            x = random.randint(self.width//4, self.width*3//4)
             bullet = self.canvas.create_oval(x, 0, x + 40, 40, fill="purple")
             self.boss_bullets.append(bullet)
 
@@ -341,7 +346,7 @@ class bullet_hell_game:
                     self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
-                if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
                     self.canvas.delete(bullet)
                     self.triangle_bullets.remove(bullet_tuple)
                     self.score += 2
@@ -400,7 +405,7 @@ class bullet_hell_game:
                 self.bullets.remove(bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(bullet)[1] > 600:
+            elif self.canvas.coords(bullet)[1] > self.height:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
                 self.score += 1
@@ -414,7 +419,7 @@ class bullet_hell_game:
                 self.bullets2.remove(bullet2)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(bullet2)[0] > 800:
+            elif self.canvas.coords(bullet2)[0] > self.width:
                 self.canvas.delete(bullet2)
                 self.bullets2.remove(bullet2)
                 self.score += 1
@@ -428,7 +433,7 @@ class bullet_hell_game:
                 self.egg_bullets.remove(egg_bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(egg_bullet)[1] > 600:
+            elif self.canvas.coords(egg_bullet)[1] > self.height:
                 self.canvas.delete(egg_bullet)
                 self.egg_bullets.remove(egg_bullet)
                 self.score += 2
@@ -443,7 +448,7 @@ class bullet_hell_game:
                 self.diag_bullets.remove(bullet_tuple)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(dbullet)[1] > 600:
+            elif self.canvas.coords(dbullet)[1] > self.height:
                 self.canvas.delete(dbullet)
                 self.diag_bullets.remove(bullet_tuple)
                 self.score += 2
@@ -457,7 +462,7 @@ class bullet_hell_game:
                 self.boss_bullets.remove(boss_bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(boss_bullet)[1] > 600:
+            elif self.canvas.coords(boss_bullet)[1] > self.height:
                 self.canvas.delete(boss_bullet)
                 self.boss_bullets.remove(boss_bullet)
                 self.score += 5  # Boss bullets give more score
@@ -471,7 +476,7 @@ class bullet_hell_game:
                 self.bullets.remove(bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(bullet)[1] > 600:
+            elif self.canvas.coords(bullet)[1] > self.height:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
                 self.score += 2
@@ -491,7 +496,7 @@ class bullet_hell_game:
                     self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
-                if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
                     self.canvas.delete(bullet)
                     self.zigzag_bullets.remove(bullet_tuple)
                     self.score += 2
@@ -509,7 +514,7 @@ class bullet_hell_game:
                 self.fast_bullets.remove(fast_bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(fast_bullet)[1] > 600:
+            elif self.canvas.coords(fast_bullet)[1] > self.height:
                 self.canvas.delete(fast_bullet)
                 self.fast_bullets.remove(fast_bullet)
                 self.score += 2
@@ -523,7 +528,7 @@ class bullet_hell_game:
                 self.star_bullets.remove(star_bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(star_bullet)[1] > 600:
+            elif self.canvas.coords(star_bullet)[1] > self.height:
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
                 self.score += 3
@@ -537,7 +542,7 @@ class bullet_hell_game:
                 self.rect_bullets.remove(rect_bullet)
                 if self.lives <= 0:
                     self.end_game()
-            elif self.canvas.coords(rect_bullet)[1] > 600:
+            elif self.canvas.coords(rect_bullet)[1] > self.height:
                 self.canvas.delete(rect_bullet)
                 self.rect_bullets.remove(rect_bullet)
                 self.score += 2
@@ -554,10 +559,11 @@ class bullet_hell_game:
 
     def end_game(self):
         self.game_over = True
-        self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
-        self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
-        self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
-        self.canvas.create_text(400, 450, text="Press R to Restart", fill="yellow", font=("Arial", 18))
+        self.canvas.create_text(self.width//2, self.height//2-50, text="Game Over", fill="white", font=("Arial", 30))
+        self.canvas.create_text(self.width//2, self.height//2, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
+        self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
+        self.root.bind("r", self.restart_game)
 
 if __name__ == "__main__":
     root = tk.Tk()
