@@ -173,6 +173,7 @@ class bullet_hell_game:
             "This is getting intense, isn't it?",
             "Keep your head in the game!",
             "You're doing better than I expected!",
+            "Song name is Juggerbeat, I made it in 3rd grade. :3",
         ]
         return random.choice(dialogs)
 
