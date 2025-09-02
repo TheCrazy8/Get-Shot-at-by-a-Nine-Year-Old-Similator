@@ -299,6 +299,8 @@ class bullet_hell_game:
     def check_graze(self, bullet):
         # Returns True if bullet grazes player (close but not colliding)
         bullet_coords = self.canvas.coords(bullet)
+        if len(bullet_coords) < 4:
+            return False  # Bullet was deleted or invalid
         player_coords = self.canvas.coords(self.player)
         px1, py1, px2, py2 = player_coords
         cx = (px1 + px2) / 2
