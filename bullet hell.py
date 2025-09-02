@@ -259,6 +259,8 @@ class bullet_hell_game:
                 self.shoot_triangle_bullet()
             if random.randint(1, quad_chance) == 1:
                 self.shoot_quad_bullet()
+            if random.randint(1, egg_chance) == 1:
+                self.shoot_egg_bullet()
             # Move triangle bullets
             triangle_speed = 7 + self.difficulty // 2
             for bullet_tuple in self.triangle_bullets[:]:
