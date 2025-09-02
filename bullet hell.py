@@ -99,6 +99,37 @@ class bullet_hell_game:
             "Believe in yourself, you can do it!",
             "[FILTERED] You- you suck!",
             "If you can dodge a wrench, you can dodge a bullet.",
+            "Y u try?",
+            "Is this bullet hell or bullet heaven?",
+            "Dodging bullets is my cardio.",
+            "I hope you like pain.",
+            "My bullets, my rules.",
+            "You call that dodging?",
+            "Too slow!",
+            "Is that all you've got?",
+            "You can't hide forever!",
+            "Feel the burn of my bullets!",
+            "You're making this too easy!",
+            "Come on, show me what you've got!",
+            "You can't escape your fate!",
+            "This is just the beginning!",
+            "Prepare to be overwhelmed!",
+            "Your skills are impressive, but not enough!",
+            "I could do this all day!",
+            "You're in my world now!",
+            "Let's see how long you can last!",
+            "Every second you survive, I get stronger!",
+            "You think you can outlast me?",
+            "This is my domain!",
+            "You can't win, but you can try!",
+            "The harder you try, the more bullets you'll face!",
+            "You may have dodged this time, but not next time!",
+            "Is that fear I see in your eyes?",
+            "You can't run from your destiny!",
+            "Your efforts are futile!",
+            "I admire your persistence!",
+            "Persistence won't save you!",
+            "You're just delaying the inevitable!",
         ]
         return random.choice(dialogs)
 
@@ -188,6 +219,7 @@ class bullet_hell_game:
             if now - self.last_difficulty_increase > 100:
                 self.difficulty += 1
                 self.last_difficulty_increase = now
+                self.canvas.itemconfig(self.dialog, text=self.get_dialog_string())
             self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
             self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
 
