@@ -352,6 +352,9 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        self.canvas.lift(self.dialog)
+        self.canvas.lift(self.scorecount)
+        self.canvas.lift(self.timecount)
         # Move graze effect to follow player if active
         if self.graze_effect_id:
             px1, py1, px2, py2 = self.canvas.coords(self.player)
