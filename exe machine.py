@@ -15,7 +15,7 @@ print(f"Successfully navigated to: {os.getcwd()}")
 
 # Run the script to make Python file into an EXE file
 PyInstaller.__main__.run([
-'bullet hell.py',
+'Get Shot at by a Nine Year Old Simulator.py',
 '--add-data=music.mp3:.',
 '--onefile',
 '--windowed',
