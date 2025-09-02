@@ -400,21 +400,19 @@ class bullet_hell_game:
                 self.score += 2
 
         # Move diagonal bullets
-        for bullet_tuple in self.triangle_bullets[:]:
-            bullet, direction = bullet_tuple
-            self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
+        for bullet in self.diag_bullets[:]:
+            bullet, direction = bullet
+            self.canvas.move(bullet, diag_speed * direction, diag_speed)
             if self.check_collision(bullet):
                 self.lives -= 1
                 self.canvas.delete(bullet)
-                self.triangle_bullets.remove(bullet_tuple)
+                self.diag_bullets.remove(bullet)
                 if self.lives <= 0:
                     self.end_game()
-            else:
-                coords = self.canvas.coords(bullet)
-                if coords[1] > 600 or coords[0] < 0 or coords[2] > 800:
-                    self.canvas.delete(bullet)
-                    self.triangle_bullets.remove(bullet_tuple)
-                    self.score += 2
+            elif self.canvas.coords(bullet)[1] > 600:
+                self.canvas.delete(bullet)
+                self.diag_bullets.remove(bullet)
+                self.score += 2
 
         # Move boss bullets
         for boss_bullet in self.boss_bullets[:]:
