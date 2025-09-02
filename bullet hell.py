@@ -52,6 +52,7 @@ class bullet_hell_game:
         self.pause_text = None
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
+        self.lastdial = time.time()
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
         self.root.bind("r", self.restart_game)
@@ -85,13 +86,14 @@ class bullet_hell_game:
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
+        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
         self.lives = 1
         self.game_over = False
         self.paused = False
         self.pause_text = None
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
+        self.lastdial = time.time()
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -207,7 +209,6 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
         else:
             self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
-        return self.dial
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
@@ -367,6 +368,9 @@ class bullet_hell_game:
         if now - self.last_difficulty_increase > 60:
             self.difficulty += 1
             self.last_difficulty_increase = now
+        if now - self.lastdial > 15:
+            self.get_dialog_string()
+            self.lastdial = now
             self.canvas.itemconfig(self.dialog, text=self.get_dialog_string())
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
