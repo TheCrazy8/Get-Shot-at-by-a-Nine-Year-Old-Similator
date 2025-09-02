@@ -40,7 +40,7 @@ class bullet_hell_game:
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(400, 20, text=get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
+        self.dialog = self.canvas.create_text(400, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
         self.lives = 1
         self.game_over = False
         self.root.bind("<KeyPress>", self.move_player)
