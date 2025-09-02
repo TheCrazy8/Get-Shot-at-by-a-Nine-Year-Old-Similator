@@ -19,7 +19,7 @@ class bullet_hell_game:
         except Exception as e:
             print("Could not play music:", e)
         self.root = root
-        self.root.title("Get Shot at by a Nine Year Old Similator")
+        self.root.title("Get Shot at by a Nine Year Old Simulator")
         self.root.state('zoomed')  # Maximize window (Windows only)
         self.root.update_idletasks()
         self.width = self.root.winfo_width()
