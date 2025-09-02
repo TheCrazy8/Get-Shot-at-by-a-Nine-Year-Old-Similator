@@ -59,6 +59,8 @@ class bullet_hell_game:
         self.grazing_radius = 40
         self.grazed_bullets = set()
         self.graze_effect_id = None
+        self.paused_time_total = 0  # Total time spent paused
+        self.pause_start_time = None  # When pause started
         self.update_game()
 
     def restart_game(self, event=None):
@@ -94,6 +96,8 @@ class bullet_hell_game:
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.lastdial = time.time()
+        self.paused_time_total = 0
+        self.pause_start_time = None
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -271,17 +275,20 @@ class bullet_hell_game:
             return
         self.paused = not self.paused
         if self.paused:
-            self.tome = self.timee
+            self.pause_start_time = time.time()
             if not self.pause_text:
                 self.pause_text = self.canvas.create_text(self.width//2, self.height//2, text="Paused", fill="yellow", font=("Arial", 40))
         else:
             if self.pause_text:
                 self.canvas.delete(self.pause_text)
                 self.pause_text = None
+            # Add paused duration to total
+            if self.pause_start_time:
+                self.paused_time_total += time.time() - self.pause_start_time
+                self.pause_start_time = None
         # Resume update loop if unpaused
         if not self.paused:
             self.update_game()
-            self.timee = self.tome
 
     def shoot_bullet(self):
         if not self.game_over:
@@ -383,8 +390,10 @@ class bullet_hell_game:
             self.get_dialog_string()
             self.lastdial = now
             self.canvas.itemconfig(self.dialog, text=self.dial)
+        # Calculate time survived, pausable
+        time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
-        self.canvas.itemconfig(self.timecount, text=f"Time: {int(now - self.timee)}")
+        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
 
         # Lower values mean higher spawn rate
         bullet_chance = max(4, 30 - self.difficulty)
@@ -702,9 +711,10 @@ class bullet_hell_game:
 
     def end_game(self):
         self.game_over = True
+        time_survived = int(time.time() - self.timee - self.paused_time_total)
         self.canvas.create_text(self.width//2, self.height//2-50, text="Game Over", fill="white", font=("Arial", 30))
         self.canvas.create_text(self.width//2, self.height//2, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
-        self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
         self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
         self.root.bind("r", self.restart_game)
 
