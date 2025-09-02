@@ -45,6 +45,8 @@ class bullet_hell_game:
         self.game_over = False
         self.paused = False
         self.pause_text = None
+        self.difficulty = 1
+        self.last_difficulty_increase = time.time()
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
 
