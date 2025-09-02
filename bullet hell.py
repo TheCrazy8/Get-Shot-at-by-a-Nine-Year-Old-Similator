@@ -49,6 +49,7 @@ class bullet_hell_game:
         self.last_difficulty_increase = time.time()
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
+        self.update_game()
 
     def restart_game(self, event=None):
         if not self.game_over:
