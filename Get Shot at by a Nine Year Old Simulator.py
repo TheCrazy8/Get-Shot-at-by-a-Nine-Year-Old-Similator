@@ -272,6 +272,7 @@ class bullet_hell_game:
         self.paused = not self.paused
         if self.paused:
             if not self.pause_text:
+                self.tome = self.timee
                 self.pause_text = self.canvas.create_text(self.width//2, self.height//2, text="Paused", fill="yellow", font=("Arial", 40))
         else:
             if self.pause_text:
@@ -280,6 +281,7 @@ class bullet_hell_game:
         # Resume update loop if unpaused
         if not self.paused:
             self.update_game()
+            self.timee = self.tome
 
     def shoot_bullet(self):
         if not self.game_over:
