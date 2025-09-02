@@ -113,6 +113,7 @@ class bullet_hell_game:
 
     def get_dialog_string(self):
         dialogs = [
+            ":)",
             "Welcome to Bullet Hell!",
             "Dodge the bullets and survive as long as you can!",
             "Use arrow keys to move yourself.",
@@ -190,13 +191,15 @@ class bullet_hell_game:
             "Murder! Yippee!!!",
             "The person making the game may or may not be a nine year old.",
             "Yes im self aware, and will actively break the 4th wall.",
-            ":)",
             "\n I could really go for some applesauce... \n Or corpses...",
             "U just got beat up by a girl!",
             "Smug colon-three",
-            
+
         ]
-        return random.choice(dialogs)
+        self.dial=random.choice(dialogs)
+        if self.dial == ":)":
+            self.canvas.itemconfig(self.dialog, fill="red")
+        return self.dial
 
     def shoot_horizontal_laser(self):
         if not self.game_over:
