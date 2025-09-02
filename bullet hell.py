@@ -47,7 +47,37 @@ class bullet_hell_game:
         self.pause_text = None
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
-        self.root.bind("<Escape>", self.toggle_pause)
+
+    def restart_game(self, event=None):
+        if not self.game_over:
+            return
+        # Remove all canvas items
+        for item in self.canvas.find_all():
+            self.canvas.delete(item)
+        # Reset all game state
+        self.player = self.canvas.create_rectangle(390, 550, 410, 570, fill="white")
+        self.bullets = []
+        self.bullets2 = []
+        self.triangle_bullets = []
+        self.diag_bullets = []
+        self.boss_bullets = []
+        self.zigzag_bullets = []
+        self.fast_bullets = []
+        self.star_bullets = []
+        self.rect_bullets = []
+        self.fast_bullets = []
+        self.egg_bullets = []
+        self.laser_indicators = []
+        self.lasers = []
+        self.score = 0
+        self.timee = int(time.time())
+        self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
+        self.timecount = self.canvas.create_text(730, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        self.dialog = self.canvas.create_text(400, 20, text=self.get_dialog_string(), fill="white", font=("Arial", 20), justify="center")
+        self.lives = 1
+        self.game_over = False
+        self.paused = False
+        self.pause_text = None
         self.difficulty = 1
         self.last_difficulty_increase = time.time()
         self.update_game()
@@ -523,6 +553,7 @@ class bullet_hell_game:
         self.canvas.create_text(400, 300, text="Game Over", fill="white", font=("Arial", 30))
         self.canvas.create_text(400, 350, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         self.canvas.create_text(400, 400, text=f"Time Survived: {int(time.time() - self.timee)} seconds", fill="white", font=("Arial", 20))
+        self.canvas.create_text(400, 450, text="Press R to Restart", fill="yellow", font=("Arial", 18))
 
 if __name__ == "__main__":
     root = tk.Tk()
