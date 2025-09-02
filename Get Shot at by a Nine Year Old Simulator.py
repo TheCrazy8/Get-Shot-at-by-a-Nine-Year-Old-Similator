@@ -371,7 +371,7 @@ class bullet_hell_game:
         if now - self.last_difficulty_increase > 60:
             self.difficulty += 1
             self.last_difficulty_increase = now
-        if now - self.lastdial > 15:
+        if now - self.lastdial > 10:
             self.get_dialog_string()
             self.lastdial = now
             self.canvas.itemconfig(self.dialog, text=self.dial)
