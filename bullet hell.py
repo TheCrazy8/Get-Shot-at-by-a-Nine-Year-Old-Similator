@@ -186,7 +186,7 @@ class bullet_hell_game:
     def shoot_horizontal_laser(self):
         if not self.game_over:
             y = random.randint(50, self.height-50)
-            indicator = self.canvas.create_line(0, y, 800, y, fill="red", dash=(5, 2), width=3)
+            indicator = self.canvas.create_line(0, y, self.width, y, fill="red", dash=(5, 2), width=3)
             self.laser_indicators.append((indicator, y, 30))  # 30 frames indicator
 
     def shoot_star_bullet(self):
