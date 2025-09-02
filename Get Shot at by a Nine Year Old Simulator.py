@@ -42,7 +42,7 @@ class bullet_hell_game:
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
         self.timee = int(time.time())
-        self.dial = "Welcome to Bullet Hell!"
+        self.dial = "Welcome to Get Shot at by a Nine Year Old Similator!"
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
