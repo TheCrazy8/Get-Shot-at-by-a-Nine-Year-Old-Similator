@@ -199,6 +199,8 @@ class bullet_hell_game:
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
             self.canvas.itemconfig(self.dialog, fill="red")
+        else:
+            self.canvas.itemconfig(self.dialog, fill="white")
         return self.dial
 
     def shoot_horizontal_laser(self):
