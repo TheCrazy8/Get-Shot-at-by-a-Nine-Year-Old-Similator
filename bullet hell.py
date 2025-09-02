@@ -54,6 +54,9 @@ class bullet_hell_game:
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
         self.root.bind("r", self.restart_game)
+        self.grazing_radius = 40
+        self.grazed_bullets = set()
+        self.graze_effect_id = None
         self.update_game()
 
     def restart_game(self, event=None):
@@ -279,6 +282,37 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 40, 40, fill="purple")
             self.boss_bullets.append(bullet)
 
+    def show_graze_effect(self):
+        # Remove previous effect if present
+        if self.graze_effect_id:
+            self.canvas.delete(self.graze_effect_id)
+        px1, py1, px2, py2 = self.canvas.coords(self.player)
+        cx = (px1 + px2) / 2
+        cy = (py1 + py2) / 2
+        self.graze_effect_id = self.canvas.create_oval(
+            cx - self.grazing_radius, cy - self.grazing_radius,
+            cx + self.grazing_radius, cy + self.grazing_radius,
+            outline="white", dash=(5, 5), width=2
+        )
+        # Remove after 200ms
+        self.root.after(200, lambda: self.canvas.delete(self.graze_effect_id))
+        self.graze_effect_id = None
+
+    def check_graze(self, bullet):
+        # Returns True if bullet grazes player (close but not colliding)
+        bullet_coords = self.canvas.coords(bullet)
+        player_coords = self.canvas.coords(self.player)
+        px1, py1, px2, py2 = player_coords
+        cx = (px1 + px2) / 2
+        cy = (py1 + py2) / 2
+        bx = (bullet_coords[0] + bullet_coords[2]) / 2
+        by = (bullet_coords[1] + bullet_coords[3]) / 2
+        dist = ((cx - bx) ** 2 + (cy - by) ** 2) ** 0.5
+        # Not colliding, but within grazing radius
+        if dist < self.grazing_radius + 10 and not self.check_collision(bullet):
+            return True
+        return False
+
     def update_game(self):
         if self.game_over:
             return
@@ -409,6 +443,11 @@ class bullet_hell_game:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
                 self.score += 1
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
 
         # Move horizontal bullets
         for bullet2 in self.bullets2[:]:
@@ -423,6 +462,11 @@ class bullet_hell_game:
                 self.canvas.delete(bullet2)
                 self.bullets2.remove(bullet2)
                 self.score += 1
+            # Grazing check
+            if self.check_graze(bullet2) and bullet2 not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet2)
+                self.show_graze_effect()
 
         # Move egg bullets
         for egg_bullet in self.egg_bullets[:]:
@@ -437,6 +481,11 @@ class bullet_hell_game:
                 self.canvas.delete(egg_bullet)
                 self.egg_bullets.remove(egg_bullet)
                 self.score += 2
+            # Grazing check
+            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(egg_bullet)
+                self.show_graze_effect()
 
         # Move diagonal bullets
         for bullet_tuple in self.diag_bullets[:]:
@@ -452,6 +501,11 @@ class bullet_hell_game:
                 self.canvas.delete(dbullet)
                 self.diag_bullets.remove(bullet_tuple)
                 self.score += 2
+            # Grazing check
+            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(dbullet)
+                self.show_graze_effect()
 
         # Move boss bullets
         for boss_bullet in self.boss_bullets[:]:
@@ -466,6 +520,11 @@ class bullet_hell_game:
                 self.canvas.delete(boss_bullet)
                 self.boss_bullets.remove(boss_bullet)
                 self.score += 5  # Boss bullets give more score
+            # Grazing check
+            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
+                self.score += 2
+                self.grazed_bullets.add(boss_bullet)
+                self.show_graze_effect()
 
         # Move quad bullets
         for bullet in self.bullets[:]:
@@ -518,6 +577,11 @@ class bullet_hell_game:
                 self.canvas.delete(fast_bullet)
                 self.fast_bullets.remove(fast_bullet)
                 self.score += 2
+            # Grazing check
+            if self.check_graze(fast_bullet) and fast_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(fast_bullet)
+                self.show_graze_effect()
 
         # Move star bullets
         for star_bullet in self.star_bullets[:]:
@@ -532,6 +596,11 @@ class bullet_hell_game:
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
                 self.score += 3
+            # Grazing check
+            if self.check_graze(star_bullet) and star_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(star_bullet)
+                self.show_graze_effect()
 
         # Move rectangle bullets
         for rect_bullet in self.rect_bullets[:]:
