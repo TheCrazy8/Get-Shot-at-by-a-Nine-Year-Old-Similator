@@ -42,7 +42,7 @@ class bullet_hell_game:
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
         self.timee = int(time.time())
-        self.dial = "Welcome to Get Shot at by a Nine Year Old Similator!"
+        self.dial = "Welcome to Get Shot at by a Nine Year Old Simulator!"
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
@@ -200,7 +200,7 @@ class bullet_hell_game:
             "\n Never gonna give you up,\n never gonna let you down.",
             "Who gave me a GUN?",
             "Blep",
-            "\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter."
+            "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
