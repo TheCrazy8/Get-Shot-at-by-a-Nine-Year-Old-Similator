@@ -198,7 +198,6 @@ class bullet_hell_game:
             "Smug colon-three",
             "Get dunked on!!!",
             "\nNever gonna give you up,\n never gonna let you down."
-
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
