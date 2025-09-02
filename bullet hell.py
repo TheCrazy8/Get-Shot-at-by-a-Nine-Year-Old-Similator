@@ -560,6 +560,11 @@ class bullet_hell_game:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
                 self.score += 2
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
 
         # Move zigzag bullets
         for bullet_tuple in self.zigzag_bullets[:]:
@@ -584,6 +589,11 @@ class bullet_hell_game:
                     # Update tuple with incremented step_count and possibly new direction
                     idx = self.zigzag_bullets.index(bullet_tuple)
                     self.zigzag_bullets[idx] = (bullet, direction, step_count + 1)
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
 
         # Move fast bullets
         for fast_bullet in self.fast_bullets[:]:
@@ -636,6 +646,11 @@ class bullet_hell_game:
                 self.canvas.delete(rect_bullet)
                 self.rect_bullets.remove(rect_bullet)
                 self.score += 2
+            # Grazing check
+            if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(rect_bullet)
+                self.show_graze_effect()
 
         self.root.after(50, self.update_game)
 
