@@ -183,6 +183,15 @@ class bullet_hell_game:
             "Keep your head in the game!",
             "You're doing better than I expected!",
             "Song name is Juggerbeat, I made it in 3rd grade. :3",
+            "BTW the dialog is canonically spoken by a nine year old.",
+            "The bullets are getting faster, just like your heart rate!",
+            "The person making the bullets is also a nine year old. (same person lol)",
+            "Yeah im not okay!",
+            "Murder! Yippee!!!",
+            "The person making the game may or may not be a nine year old.",
+            "Yes im self aware, and will actively break the 4th wall.",
+            ":)",
+            "I could really go for some applesauce... \n Or corpses..."
         ]
         return random.choice(dialogs)
 
