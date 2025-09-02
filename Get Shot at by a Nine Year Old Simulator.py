@@ -207,7 +207,7 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, fill="red")
         else:
             self.canvas.itemconfig(self.dialog, fill="white")
-        if self.dial == "\nNever gonna give you up,\n never gonna let you down.":
+        if self.dial == "\n Never gonna give you up,\n never gonna let you down.":
             self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
         else:
             self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
