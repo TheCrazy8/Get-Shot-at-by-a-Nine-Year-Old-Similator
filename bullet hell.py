@@ -444,6 +444,7 @@ class bullet_hell_game:
                     self.end_game()
             elif self.canvas.coords(dbullet)[1] > 600:
                 self.canvas.delete(dbullet)
+                self.diag_bullets.remove(dbullet)
                 self.score += 2
 
         # Move boss bullets
