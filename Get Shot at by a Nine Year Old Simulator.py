@@ -69,8 +69,12 @@ class bullet_hell_game:
         self.pause_start_time = None  # When pause started
         self.update_game()
         # Initialize Firebase app
-        self.cred = credentials.Certificate('serviceAccountKey.json')
-        firebase_admin.initialize_app(cred, {
+        if hasattr(sys, '_MEIPASS'):
+                self.credpath = os.path.join(sys._MEIPASS, "serviceAccountKey.json")
+            else:
+                self.credpath = "serviceAccountKey.json"
+        self.cred = credentials.Certificate(self.credpath)
+        firebase_admin.initialize_app(self.cred, {
             'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com'
         })
 
