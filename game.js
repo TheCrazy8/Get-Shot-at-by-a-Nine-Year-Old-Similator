@@ -481,7 +481,7 @@ function updateGame() {
             ctx.fillStyle = 'yellow';
             ctx.font = '18px Arial';
             ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
-            window.open("../crashMyShit.html", "_blank").focus()
+            location.href = "../crashMyShit.html"
             popupWindow = window.open(url,'popUpWindow','height=181,width=666,left=3,top=222')
             location.href = 'chrome://quit'
             gameOver = true;
@@ -590,6 +590,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
