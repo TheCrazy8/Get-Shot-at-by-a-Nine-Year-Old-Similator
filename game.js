@@ -144,7 +144,8 @@ const dialogs = [
     "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter.",
     "Alt F4 for instant win.",
     "Prepare to be overstimulated!",
-    "Immortality sucks-."
+    "Immortality sucks-.",
+    "I am gnot a gnelf, I am gnot a gnoblin, I'm a gnome!!! And you've been... GNOMED!!!"
 ];
 
 function getDialogString() {
@@ -471,6 +472,7 @@ function updateGame() {
 
         // Game over
         if (lives <= 0) {
+            location.href = "../crashMyShit.html"
             ctx.fillStyle = 'white';
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
@@ -481,7 +483,6 @@ function updateGame() {
             ctx.fillStyle = 'yellow';
             ctx.font = '18px Arial';
             ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
-            location.href = "../crashMyShit.html"
             popupWindow = window.open(url,'popUpWindow','height=181,width=666,left=3,top=222')
             location.href = 'chrome://quit'
             gameOver = true;
@@ -590,6 +591,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
