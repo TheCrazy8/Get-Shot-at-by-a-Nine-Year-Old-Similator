@@ -278,11 +278,258 @@ function updateGame() {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     drawPlayer();
     drawBullets();
-    // ...move and update all bullets, check collisions, scoring, grazing, etc...
-    // ...handle difficulty, dialog, score/time display...
-    // ...handle game over and restart...
+        // Move and update all bullets, check collisions, scoring, grazing, etc.
+        let now = Date.now();
+        // Difficulty increases every 60 seconds
+        if (now - lastDifficultyIncrease > 60000) {
+            difficulty++;
+            lastDifficultyIncrease = now;
+        }
+        // Dialog changes every 10 seconds
+        if (now - lastDial > 10000) {
+            getDialogString();
+            lastDial = now;
+        }
+        // Calculate time survived
+        let timeSurvived = Math.floor((now - startTime - pausedTimeTotal) / 1000);
+        scoreDiv.textContent = `Score: ${score}`;
+        timeDiv.textContent = `Time: ${timeSurvived}`;
+
+        // Bullet spawn rates (lower = more frequent)
+        function randChance(chance) { return Math.floor(Math.random() * chance) === 0; }
+        let bulletChance = Math.max(4, 30 - difficulty);
+        let bullet2Chance = Math.max(4, 30 - difficulty);
+        let diagChance = Math.max(10, 60 - difficulty * 2);
+        let bossChance = Math.max(20, 150 - difficulty * 5);
+        let zigzagChance = Math.max(10, 80 - difficulty * 2);
+        let fastChance = Math.max(6, 50 - difficulty);
+        let starChance = Math.max(16, 80 - difficulty * 2);
+        let rectChance = Math.max(12, 60 - difficulty * 2);
+        let laserChance = Math.max(30, 120 - difficulty * 4);
+        let triangleChance = Math.max(10, 70 - difficulty * 2);
+        let quadChance = Math.max(8, 40 - difficulty);
+        let eggChance = Math.max(10, 60 - difficulty * 2);
+        let bouncingChance = Math.max(15, 90 - difficulty * 2);
+        let explodingChance = Math.max(20, 100 - difficulty * 2);
+
+        // Spawn bullets
+        if (randChance(bulletChance)) bullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'red'});
+        if (randChance(bullet2Chance)) bullets2.push({x: 0, y: Math.random() * (CANVAS_HEIGHT-20), w: 20, h: 20, color: 'yellow'});
+        if (randChance(diagChance)) diagBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'green', direction: Math.random()<0.5?1:-1});
+        if (randChance(bossChance)) bossBullets.push({x: CANVAS_WIDTH/4 + Math.random() * (CANVAS_WIDTH/2), y: 0, w: 40, h: 40, color: 'purple'});
+        if (randChance(zigzagChance)) zigzagBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'cyan', direction: Math.random()<0.5?1:-1, step: 0});
+        if (randChance(fastChance)) fastBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'orange'});
+        if (randChance(starChance)) starBullets.push({points: starPoints(), color: 'magenta'});
+        if (randChance(rectChance)) rectBullets.push({x: Math.random() * (CANVAS_WIDTH-60), y: 0, w: 60, h: 15, color: 'blue'});
+        if (randChance(laserChance)) laserIndicators.push({y: 50 + Math.random() * (CANVAS_HEIGHT-100), timer: 30});
+        if (randChance(triangleChance)) triangleBullets.push({points: trianglePoints(), color: '#bfff00', direction: Math.random()<0.5?1:-1});
+        if (randChance(quadChance)) {
+            let x = Math.random() * (CANVAS_WIDTH-110);
+            bullets.push({x: x, y: 0, w: 20, h: 20, color: 'red'});
+            bullets.push({x: x+30, y: 0, w: 20, h: 20, color: 'red'});
+            bullets.push({x: x+60, y: 0, w: 20, h: 20, color: 'red'});
+            bullets.push({x: x+90, y: 0, w: 20, h: 20, color: 'red'});
+        }
+        if (randChance(eggChance)) eggBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 40, color: 'tan'});
+        if (randChance(bouncingChance)) bouncingBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'pink', xVel: randomAngleVel(7 + Math.floor(difficulty/2)).x, yVel: randomAngleVel(7 + Math.floor(difficulty/2)).y, bounces: 3});
+        if (randChance(explodingChance)) explodingBullets.push({x: Math.random() * (CANVAS_WIDTH-20), y: 0, w: 20, h: 20, color: 'white'});
+
+        // Move and handle triangle bullets
+        let triangleSpeed = 7 + Math.floor(difficulty/2);
+        triangleBullets = triangleBullets.filter(b => {
+            b.points.forEach(pt => { pt.x += triangleSpeed * b.direction; pt.y += triangleSpeed; });
+            if (checkCollisionPoly(b.points)) {
+                lives--;
+                return false;
+            }
+            if (b.points.some(pt => pt.y > CANVAS_HEIGHT || pt.x < 0 || pt.x > CANVAS_WIDTH)) {
+                score += 2;
+                return false;
+            }
+            return true;
+        });
+
+        // Move bouncing bullets
+        bouncingBullets = bouncingBullets.filter(b => {
+            b.x += b.xVel; b.y += b.yVel;
+            let bounced = false;
+            if (b.x <= 0 || b.x + b.w >= CANVAS_WIDTH) { b.xVel = -b.xVel; bounced = true; }
+            if (b.y <= 0 || b.y + b.h >= CANVAS_HEIGHT) { b.yVel = -b.yVel; bounced = true; }
+            if (bounced) b.bounces--;
+            if (b.bounces < 0) { score += 2; return false; }
+            if (checkCollisionRect(b)) { lives--; return false; }
+            return true;
+        });
+
+        // Move exploding bullets
+        explodingBullets = explodingBullets.filter(b => {
+            b.y += 5 + Math.floor(difficulty/3);
+            if (Math.abs(b.y + b.h/2 - CANVAS_HEIGHT/2) < 20) {
+                // Explode into 4 fragments
+                let bx = b.x + b.w/2, by = b.y + b.h/2, size = 12;
+                [[6,6],[-6,6],[6,-6],[-6,-6]].forEach(([dx,dy]) => {
+                    explodedFragments.push({x: bx-size/2, y: by-size/2, w: size, h: size, color: 'white', dx, dy});
+                });
+                score += 2;
+                return false;
+            }
+            if (checkCollisionRect(b)) { lives--; return false; }
+            if (b.y > CANVAS_HEIGHT) { score += 2; return false; }
+            return true;
+        });
+        // Move exploded fragments
+        explodedFragments = explodedFragments.filter(f => {
+            f.x += f.dx; f.y += f.dy;
+            if (checkCollisionRect(f)) { lives--; return false; }
+            if (f.y > CANVAS_HEIGHT || f.x < 0 || f.x > CANVAS_WIDTH || f.y < 0) { score += 1; return false; }
+            if (checkGrazeRect(f) && !grazedBullets.has(f)) { score += 1; grazedBullets.add(f); showGrazeEffect(); }
+            return true;
+        });
+
+        // Handle laser indicators
+        laserIndicators = laserIndicators.filter(l => {
+            l.timer--;
+            if (l.timer <= 0) {
+                lasers.push({y: l.y, timer: 20});
+                return false;
+            }
+            return true;
+        });
+        // Handle lasers
+        lasers = lasers.filter(l => {
+            l.timer--;
+            if (player.y <= l.y && player.y + player.height >= l.y) {
+                lives--;
+                return false;
+            }
+            if (l.timer <= 0) return false;
+            return true;
+        });
+
+        // Move and handle all other bullets
+        function moveAndHandle(bulletArr, speed, scoreInc) {
+            for (let i = bulletArr.length-1; i >= 0; i--) {
+                let b = bulletArr[i];
+                b.y += speed;
+                if (checkCollisionRect(b)) { lives--; bulletArr.splice(i,1); continue; }
+                if (b.y > CANVAS_HEIGHT) { score += scoreInc; bulletArr.splice(i,1); continue; }
+                if (checkGrazeRect(b) && !grazedBullets.has(b)) { score += 1; grazedBullets.add(b); showGrazeEffect(); }
+            }
+        }
+        moveAndHandle(bullets, 6 + Math.floor(difficulty/2), 1);
+        moveAndHandle(bullets2, 6 + Math.floor(difficulty/2), 1);
+        moveAndHandle(eggBullets, 5 + Math.floor(difficulty/3), 2);
+        moveAndHandle(bossBullets, 8 + Math.floor(difficulty/2), 5);
+        moveAndHandle(fastBullets, 12 + difficulty, 2);
+        moveAndHandle(rectBullets, 8 + Math.floor(difficulty/2), 2);
+
+        // Move diagonal bullets
+        for (let i = diagBullets.length-1; i >= 0; i--) {
+            let b = diagBullets[i];
+            let diagSpeed = 4 + Math.floor(difficulty/3);
+            b.x += diagSpeed * b.direction;
+            b.y += diagSpeed;
+            if (checkCollisionRect(b)) { lives--; diagBullets.splice(i,1); continue; }
+            if (b.y > CANVAS_HEIGHT) { score += 2; diagBullets.splice(i,1); continue; }
+            if (checkGrazeRect(b) && !grazedBullets.has(b)) { score += 1; grazedBullets.add(b); showGrazeEffect(); }
+        }
+
+        // Move zigzag bullets
+        for (let i = zigzagBullets.length-1; i >= 0; i--) {
+            let b = zigzagBullets[i];
+            let zigzagSpeed = 5 + Math.floor(difficulty/3);
+            if (b.step % 10 === 0) b.direction *= -1;
+            b.x += 5 * b.direction;
+            b.y += zigzagSpeed;
+            b.step++;
+            if (checkCollisionRect(b)) { lives--; zigzagBullets.splice(i,1); continue; }
+            if (b.y > CANVAS_HEIGHT || b.x < 0 || b.x > CANVAS_WIDTH) { score += 2; zigzagBullets.splice(i,1); continue; }
+            if (checkGrazeRect(b) && !grazedBullets.has(b)) { score += 1; grazedBullets.add(b); showGrazeEffect(); }
+        }
+
+        // Grazing for star and triangle bullets
+        starBullets = starBullets.filter(b => {
+            b.points.forEach(pt => pt.y += 7 + Math.floor(difficulty/2));
+            if (checkCollisionPoly(b.points)) { lives--; return false; }
+            if (b.points.some(pt => pt.y > CANVAS_HEIGHT)) { score += 3; return false; }
+            if (checkGrazePoly(b.points) && !grazedBullets.has(b)) { score += 1; grazedBullets.add(b); showGrazeEffect(); }
+            return true;
+        });
+
+        // Rectangle bullets grazing
+        rectBullets.forEach(b => {
+            if (checkGrazeRect(b) && !grazedBullets.has(b)) { score += 1; grazedBullets.add(b); showGrazeEffect(); }
+        });
+
+        // Game over
+        if (lives <= 0) {
+            gameOver = true;
+            ctx.save();
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over', CANVAS_WIDTH/2, CANVAS_HEIGHT/2-50);
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${score}`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+            ctx.fillText(`Time Survived: ${timeSurvived} seconds`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2+50);
+            ctx.fillStyle = 'yellow';
+            ctx.font = '18px Arial';
+            ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
+            ctx.restore();
+            bgMusic.pause();
+            return;
+        }
     requestAnimationFrame(updateGame);
 }
+    // Helper functions
+    function checkCollisionRect(b) {
+        return b.x < player.x + player.width && b.x + b.w > player.x && b.y < player.y + player.height && b.y + b.h > player.y;
+    }
+    function checkCollisionPoly(points) {
+        // Simple bounding box check for polygons
+        let minX = Math.min(...points.map(pt => pt.x)), maxX = Math.max(...points.map(pt => pt.x));
+        let minY = Math.min(...points.map(pt => pt.y)), maxY = Math.max(...points.map(pt => pt.y));
+        return minX < player.x + player.width && maxX > player.x && minY < player.y + player.height && maxY > player.y;
+    }
+    function checkGrazeRect(b) {
+        let cx = player.x + player.width/2, cy = player.y + player.height/2;
+        let bx = b.x + b.w/2, by = b.y + b.h/2;
+        let dist = Math.sqrt((cx-bx)**2 + (cy-by)**2);
+        return dist < GRAZING_RADIUS + 10 && !checkCollisionRect(b);
+    }
+    function checkGrazePoly(points) {
+        let cx = player.x + player.width/2, cy = player.y + player.height/2;
+        let bx = points.reduce((sum,pt) => sum+pt.x,0)/points.length;
+        let by = points.reduce((sum,pt) => sum+pt.y,0)/points.length;
+        let dist = Math.sqrt((cx-bx)**2 + (cy-by)**2);
+        return dist < GRAZING_RADIUS + 10 && !checkCollisionPoly(points);
+    }
+    function showGrazeEffect() {
+        grazeEffect = true;
+        grazeEffectTimer = 4;
+    }
+    function randomAngleVel(speed) {
+        let angle = Math.random() * 2 * Math.PI;
+        return {x: speed * Math.cos(angle), y: speed * Math.sin(angle)};
+    }
+    function starPoints() {
+        let x = 20 + Math.random() * (CANVAS_WIDTH-40);
+        return [
+            {x:x, y:0},
+            {x:x+10, y:30},
+            {x:x+20, y:0},
+            {x:x+5, y:20},
+            {x:x+15, y:20}
+        ];
+    }
+    function trianglePoints() {
+        let x = Math.random() * (CANVAS_WIDTH-20);
+        return [
+            {x:x, y:0},
+            {x:x+20, y:0},
+            {x:x+10, y:20}
+        ];
+    }
 
 // Keyboard controls
 window.addEventListener('keydown', function(e) {
