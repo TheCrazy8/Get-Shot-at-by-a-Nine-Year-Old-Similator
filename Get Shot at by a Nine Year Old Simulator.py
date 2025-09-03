@@ -4,6 +4,7 @@ import time
 import pygame
 import sys
 import os
+import math
 
 class bullet_hell_game:
     def __init__(self, root):
@@ -270,10 +271,13 @@ class bullet_hell_game:
         if not self.game_over:
             x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="pink")
-            # Bouncing state: (bullet, x_velocity, y_velocity)
-            x_velocity = random.choice([-3, 3])
-            y_velocity = 5
-            self.bouncing_bullets.append((bullet, x_velocity, y_velocity))
+            # Random angle in radians
+            angle = random.uniform(0, 2 * 3.14159)
+            speed = 7 + self.difficulty // 2
+            x_velocity = speed * math.cos(angle)
+            y_velocity = speed * math.sin(angle)
+            # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
+            self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
 
     def move_player(self, event):
         if self.paused or self.game_over:
@@ -481,24 +485,35 @@ class bullet_hell_game:
                     self.score += 2
         # Move bouncing bullets
         for bullet_tuple in self.bouncing_bullets[:]:
-            bullet, x_velocity, y_velocity = bullet_tuple
+            bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
             self.canvas.move(bullet, x_velocity, y_velocity)
+            coords = self.canvas.coords(bullet)
+            bounced = False
+            # Bounce off left/right
+            if coords[0] <= 0 or coords[2] >= self.width:
+                x_velocity = -x_velocity
+                bounced = True
+            # Bounce off top/bottom
+            if coords[1] <= 0 or coords[3] >= self.height:
+                y_velocity = -y_velocity
+                bounced = True
+            if bounced:
+                bounces_left -= 1
+            # Remove bullet if out of bounces
+            if bounces_left < 0:
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove(bullet_tuple)
+                self.score += 2
+                continue
+            # Update tuple with new velocities and bounces
+            idx = self.bouncing_bullets.index(bullet_tuple)
+            self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
             if self.check_collision(bullet):
                 self.lives -= 1
                 self.canvas.delete(bullet)
-                self.bouncing_bullets.remove(bullet_tuple)
+                self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
                 if self.lives <= 0:
                     self.end_game()
-            else:
-                coords = self.canvas.coords(bullet)
-                if coords[1] > self.height:
-                    self.canvas.delete(bullet)
-                    self.bouncing_bullets.remove(bullet_tuple)
-                    self.score += 2
-                else:
-                    if coords[0] <= 0 or coords[2] >= self.width:
-                        x_velocity *= random.choice([-1, 1])
-                        y_velocity *= random.choice([-1, 1])
         # Move exploding bullets
         for bullet in self.exploding_bullets[:]:
             self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
