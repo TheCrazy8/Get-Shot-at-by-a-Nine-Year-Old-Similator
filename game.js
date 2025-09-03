@@ -471,6 +471,16 @@ function updateGame() {
 
         // Game over
         if (lives <= 0) {
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over', CANVAS_WIDTH/2, CANVAS_HEIGHT/2-50);
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${score}`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+            ctx.fillText(`Time Survived: ${timeSurvived} seconds`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2+50);
+            ctx.fillStyle = 'yellow';
+            ctx.font = '18px Arial';
+            ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
             txt = "";
 
         for(var i = 0; i === i; i++) {
@@ -593,6 +603,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
