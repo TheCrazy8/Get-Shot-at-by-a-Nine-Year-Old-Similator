@@ -38,6 +38,7 @@ class bullet_hell_game:
         self.rect_bullets = []
         self.fast_bullets = []
         self.egg_bullets = []
+        self.bouncing_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
         self.score = 0
@@ -82,6 +83,7 @@ class bullet_hell_game:
         self.rect_bullets = []
         self.fast_bullets = []
         self.egg_bullets = []
+        self.bouncing_bullets = []
         self.laser_indicators = []
         self.lasers = []
         self.score = 0
@@ -254,6 +256,15 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
             self.fast_bullets.append(bullet)
 
+    def shoot_bouncing_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, self.width-20)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="pink")
+            # Bouncing state: (bullet, x_velocity, y_velocity)
+            x_velocity = random.choice([-3, 3])
+            y_velocity = 5
+            self.bouncing_bullets.append((bullet, x_velocity, y_velocity))
+
     def move_player(self, event):
         if self.paused or self.game_over:
             return
@@ -408,6 +419,7 @@ class bullet_hell_game:
         triangle_chance = max(10, 70 - self.difficulty * 2)
         quad_chance = max(8, 40 - self.difficulty)
         egg_chance = max(10, 60 - self.difficulty * 2)
+        bouncing_chance = max(15, 90 - self.difficulty * 2)
 
         if random.randint(1, bullet_chance) == 1:
             self.shoot_bullet()
@@ -433,6 +445,8 @@ class bullet_hell_game:
             self.shoot_quad_bullet()
         if random.randint(1, egg_chance) == 1:
             self.shoot_egg_bullet()
+        if random.randint(1, bouncing_chance) == 1:
+            self.shoot_bouncing_bullet()
         # Move triangle bullets
         triangle_speed = 7 + self.difficulty // 2
         for bullet_tuple in self.triangle_bullets[:]:
@@ -452,6 +466,25 @@ class bullet_hell_game:
                     self.canvas.delete(bullet)
                     self.triangle_bullets.remove(bullet_tuple)
                     self.score += 2
+        # Move bouncing bullets
+        for bullet_tuple in self.bouncing_bullets[:]:
+            bullet, x_velocity, y_velocity = bullet_tuple
+            self.canvas.move(bullet, x_velocity, y_velocity)
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove(bullet_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height:
+                    self.canvas.delete(bullet)
+                    self.bouncing_bullets.remove(bullet_tuple)
+                    self.score += 2
+                else:
+                    if coords[0] <= 0 or coords[2] >= self.width:
+                        x_velocity *= -1
         # Handle laser indicators
         for indicator_tuple in self.laser_indicators[:]:
             indicator_id, y, timer = indicator_tuple
