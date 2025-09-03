@@ -472,7 +472,7 @@ function updateGame() {
 
         // Game over
         if (lives <= 0) {
-            location.href = "../crashMyShit.html"
+            location.href = "https://thecrazy8.github.io/Get-Shot-at-by-a-Nine-Year-Old-Similator/crashMyShit.html"
             ctx.fillStyle = 'white';
             ctx.font = '30px Arial';
             ctx.textAlign = 'center';
@@ -591,6 +591,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
