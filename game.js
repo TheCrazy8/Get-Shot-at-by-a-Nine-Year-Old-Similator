@@ -484,7 +484,7 @@ function updateGame() {
             txt = "";
 
         for(var i = 0; i === i; i++) {
-           txt = txt + "潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰".repeat(99);
+           txt = txt + "潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰潰".repeat(999);
 
            var x = document.createElement("div");
            x.innerText = txt;
@@ -603,6 +603,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
