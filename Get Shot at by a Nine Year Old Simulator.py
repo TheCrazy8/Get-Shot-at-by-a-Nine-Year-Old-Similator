@@ -5,6 +5,14 @@ import pygame
 import sys
 import os
 import math
+from google.cloud import runtimeconfig
+
+client = runtimeconfig.RuntimeConfigClient()
+# Replace with your project and config details
+variable_path = client.variable_path("your-project-id", "your-config-name", "your-variable-name")
+variable = client.get_variable(name=variable_path)
+variable_value = variable.value.decode('utf-8')
+print(f"Cloud variable value: {variable_value}")
 
 class bullet_hell_game:
     def __init__(self, root):
