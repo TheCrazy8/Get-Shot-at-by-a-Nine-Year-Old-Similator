@@ -39,6 +39,7 @@ class bullet_hell_game:
         self.fast_bullets = []
         self.egg_bullets = []
         self.exploding_bullets = []
+        self.exploded_fragments = []  # [(bullet_id, dx, dy)]
         self.bouncing_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
@@ -86,6 +87,7 @@ class bullet_hell_game:
         self.egg_bullets = []
         self.bouncing_bullets = []
         self.exploding_bullets = []
+        self.exploded_fragments = []
         self.laser_indicators = []
         self.lasers = []
         self.score = 0
@@ -500,6 +502,21 @@ class bullet_hell_game:
         # Move exploding bullets
         for bullet in self.exploding_bullets[:]:
             self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
+            coords = self.canvas.coords(bullet)
+            # Check if bullet reached middle of screen (y ~ self.height//2)
+            if coords and abs((coords[1] + coords[3]) / 2 - self.height // 2) < 20:
+                # Explode into 4 diagonal fragments
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                size = 12
+                directions = [(6, 6), (-6, 6), (6, -6), (-6, -6)]
+                for dx, dy in directions:
+                    frag = self.canvas.create_oval(bx-size//2, by-size//2, bx+size//2, by+size//2, fill="white")
+                    self.exploded_fragments.append((frag, dx, dy))
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                self.score += 2
+                continue
             if self.check_collision(bullet):
                 self.lives -= 1
                 self.canvas.delete(bullet)
@@ -507,18 +524,30 @@ class bullet_hell_game:
                 if self.lives <= 0:
                     self.end_game()
             else:
-                coords = self.canvas.coords(bullet)
-                if coords[1] > self.height:
+                if coords and coords[1] > self.height:
                     self.canvas.delete(bullet)
                     self.exploding_bullets.remove(bullet)
                     self.score += 2
-                    # Spawn 4 new bullets in a cross pattern
-                    bx = (coords[0] + coords[2]) / 2
-                    by = (coords[1] + coords[3]) / 2
-                    for angle in [0, 90, 180, 270]:
-                        rad = angle * 3.14159 / 180
-                        new_bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="white")
-                        self.bullets.append(new_bullet)
+        # Move exploded fragments (diagonal bullets)
+        for frag_tuple in self.exploded_fragments[:]:
+            frag, dx, dy = frag_tuple
+            self.canvas.move(frag, dx, dy)
+            coords = self.canvas.coords(frag)
+            if self.check_collision(frag):
+                self.lives -= 1
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+            elif coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width or coords[3] < 0):
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                self.score += 1
+            # Grazing check
+            if self.check_graze(frag) and frag not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(frag)
+                self.show_graze_effect()
         # Handle laser indicators
         for indicator_tuple in self.laser_indicators[:]:
             indicator_id, y, timer = indicator_tuple
