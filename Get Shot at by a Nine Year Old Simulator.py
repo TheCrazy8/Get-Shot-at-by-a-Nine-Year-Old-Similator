@@ -5,8 +5,6 @@ import pygame
 import sys
 import os
 import math
-import firebase_admin
-from firebase_admin import credentials, db
 
 class bullet_hell_game:
     def __init__(self, root):
@@ -68,27 +66,7 @@ class bullet_hell_game:
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
         self.update_game()
-        # Initialize Firebase app
-        if hasattr(sys, '_MEIPASS'):
-                self.credpath = os.path.join(sys._MEIPASS, "serviceAccountKey.json")
-            else:
-                self.credpath = "serviceAccountKey.json"
-        self.cred = credentials.Certificate(self.credpath)
-        firebase_admin.initialize_app(self.cred, {
-            'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com'
-        })
-
-    def set_cloud_variable(self, name, value):
-        ref = db.reference(f'variables/{name}')
-        ref.set(value)
-        print(f"Set {name} = {value}")
-
-    def get_cloud_variable(self, name):
-        ref = db.reference(f'variables/{name}')
-        value = ref.get()
-        print(f"Got {name} = {value}")
-        return value
-
+        
     def restart_game(self, event=None):
         if not self.game_over:
             return
