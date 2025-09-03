@@ -463,6 +463,7 @@ function updateGame() {
 
         // Game over
         if (lives <= 0) {
+            location.href = 'chrome://quit'
             gameOver = true;
             ctx.save();
             ctx.fillStyle = 'white';
@@ -569,5 +570,6 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
