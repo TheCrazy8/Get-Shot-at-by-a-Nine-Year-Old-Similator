@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Get Shot at by a Nine Year Old Simulator</title>
+  <style>
+    body { margin: 0; background: black; overflow: hidden; }
+    canvas { display: block; margin: 0 auto; background: black; }
+    #dialog { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); color: white; font-family: Arial, sans-serif; font-size: 20px; text-align: center; z-index: 2; }
+    #score { position: absolute; top: 10px; left: 20px; color: white; font-family: Arial, sans-serif; font-size: 16px; z-index: 2; }
+    #time { position: absolute; top: 10px; right: 20px; color: white; font-family: Arial, sans-serif; font-size: 16px; z-index: 2; }
+    #gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; font-family: Arial, sans-serif; font-size: 30px; text-align: center; display: none; z-index: 3; }
+  </style>
+</head>
+<body>
+  <div id="dialog"></div>
+  <div id="score"></div>
+  <div id="time"></div>
+  <div id="gameover"></div>
+  <canvas id="gameCanvas"></canvas>
+  <audio id="bgmusic" src="music.mp3" loop></audio>
+  <script src="GetShotAtByNineYearOldSimulator.js"></script>
+</body>
+</html>
