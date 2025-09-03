@@ -1,24 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Get Shot at by a Nine Year Old Simulator</title>
-  <style>
-    body { margin: 0; background: black; overflow: hidden; }
-    canvas { display: block; margin: 0 auto; background: black; }
-    #dialog { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); color: white; font-family: Arial, sans-serif; font-size: 20px; text-align: center; z-index: 2; }
-    #score { position: absolute; top: 10px; left: 20px; color: white; font-family: Arial, sans-serif; font-size: 16px; z-index: 2; }
-    #time { position: absolute; top: 10px; right: 20px; color: white; font-family: Arial, sans-serif; font-size: 16px; z-index: 2; }
-    #gameover { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; font-family: Arial, sans-serif; font-size: 30px; text-align: center; display: none; z-index: 3; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Get Shot at by a Nine Year Old Simulator</title>
+    <style>
+        body { margin: 0; background: #000; color: #fff; font-family: Arial, sans-serif; }
+        #gameCanvas { display: block; margin: 0 auto; background: #000; }
+        #dialog { position: absolute; left: 50%; transform: translateX(-50%); top: 20px; color: white; font-size: 20px; text-align: center; width: 80vw; pointer-events: none; }
+        #score, #time { position: absolute; top: 20px; font-size: 16px; }
+        #score { left: 70px; }
+        #time { right: 70px; }
+        #pauseText { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: yellow; font-size: 40px; display: none; }
+    </style>
 </head>
 <body>
-  <div id="dialog"></div>
-  <div id="score"></div>
-  <div id="time"></div>
-  <div id="gameover"></div>
-  <canvas id="gameCanvas"></canvas>
-  <audio id="bgmusic" src="music.mp3" loop></audio>
-  <script src="GetShotAtByNineYearOldSimulator.js"></script>
+    <div id="score">Score: 0</div>
+    <div id="time">Time: 0</div>
+    <div id="dialog">Welcome to Get Shot at by a Nine Year Old Simulator!</div>
+    <div id="pauseText">Paused</div>
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+    <audio id="bgMusic" src="music.mp3" loop></audio>
+    <script src="game_port.js"></script>
 </body>
 </html>
