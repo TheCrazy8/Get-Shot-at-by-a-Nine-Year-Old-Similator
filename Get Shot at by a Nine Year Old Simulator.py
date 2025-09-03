@@ -214,7 +214,8 @@ class bullet_hell_game:
             "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter.",
             "Alt F4 for instant win.",
             "Prepare to be overstimulated!",
-            "Immortality sucks-."
+            "Immortality sucks-.",
+            "I am gnot a gnelf, I am gnot a gnoblin, I'm a gnome!!! \n  And you've been... GNOMED!!!"
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
