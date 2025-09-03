@@ -38,6 +38,7 @@ class bullet_hell_game:
         self.rect_bullets = []
         self.fast_bullets = []
         self.egg_bullets = []
+        self.exploding_bullets = []
         self.bouncing_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
@@ -84,6 +85,7 @@ class bullet_hell_game:
         self.fast_bullets = []
         self.egg_bullets = []
         self.bouncing_bullets = []
+        self.exploding_bullets = []
         self.laser_indicators = []
         self.lasers = []
         self.score = 0
@@ -228,6 +230,12 @@ class bullet_hell_game:
             indicator = self.canvas.create_line(0, y, self.width, y, fill="red", dash=(5, 2), width=3)
             self.laser_indicators.append((indicator, y, 30))  # 30 frames indicator
 
+    def shoot_exploding_bullet(self):
+        if not self.game_over:
+            x = random.randint(0, self.width-20)
+            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="white")
+            self.exploding_bullets.append(bullet)
+
     def shoot_star_bullet(self):
         if not self.game_over:
             x = random.randint(20, self.width-40)
@@ -268,16 +276,16 @@ class bullet_hell_game:
     def move_player(self, event):
         if self.paused or self.game_over:
             return
-        if event.keysym == 'Left':
+        if event.keysym == 'Left' or event.keysym == 'a':
             if self.canvas.coords(self.player)[0] > 0:
                 self.canvas.move(self.player, -20, 0)
-        elif event.keysym == 'Right':
+        elif event.keysym == 'Right' or event.keysym == 'd':
             if self.canvas.coords(self.player)[2] < self.width:
                 self.canvas.move(self.player, 20, 0)
-        elif event.keysym == 'Up':
+        elif event.keysym == 'Up' or event.keysym == 'w':
             if self.canvas.coords(self.player)[1] > 0:
                 self.canvas.move(self.player, 0, -20)
-        elif event.keysym == 'Down':
+        elif event.keysym == 'Down' or event.keysym == 's':
             if self.canvas.coords(self.player)[3] < self.height:
                 self.canvas.move(self.player, 0, 20)
 
@@ -420,6 +428,7 @@ class bullet_hell_game:
         quad_chance = max(8, 40 - self.difficulty)
         egg_chance = max(10, 60 - self.difficulty * 2)
         bouncing_chance = max(15, 90 - self.difficulty * 2)
+        exploding_chance = max(20, 100 - self.difficulty * 2)
 
         if random.randint(1, bullet_chance) == 1:
             self.shoot_bullet()
@@ -447,6 +456,8 @@ class bullet_hell_game:
             self.shoot_egg_bullet()
         if random.randint(1, bouncing_chance) == 1:
             self.shoot_bouncing_bullet()
+        if random.randint(1, exploding_chance) == 1:
+            self.shoot_exploding_bullet()
         # Move triangle bullets
         triangle_speed = 7 + self.difficulty // 2
         for bullet_tuple in self.triangle_bullets[:]:
@@ -486,6 +497,28 @@ class bullet_hell_game:
                     if coords[0] <= 0 or coords[2] >= self.width:
                         x_velocity *= random.choice([-1, 1])
                         y_velocity *= random.choice([-1, 1])
+        # Move exploding bullets
+        for bullet in self.exploding_bullets[:]:
+            self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height:
+                    self.canvas.delete(bullet)
+                    self.exploding_bullets.remove(bullet)
+                    self.score += 2
+                    # Spawn 4 new bullets in a cross pattern
+                    bx = (coords[0] + coords[2]) / 2
+                    by = (coords[1] + coords[3]) / 2
+                    for angle in [0, 90, 180, 270]:
+                        rad = angle * 3.14159 / 180
+                        new_bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="white")
+                        self.bullets.append(new_bullet)
         # Handle laser indicators
         for indicator_tuple in self.laser_indicators[:]:
             indicator_id, y, timer = indicator_tuple
