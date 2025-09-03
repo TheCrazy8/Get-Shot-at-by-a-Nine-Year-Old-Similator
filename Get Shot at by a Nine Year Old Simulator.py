@@ -484,7 +484,8 @@ class bullet_hell_game:
                     self.score += 2
                 else:
                     if coords[0] <= 0 or coords[2] >= self.width:
-                        x_velocity *= -1
+                        x_velocity *= random.choice([-1, 1])
+                        y_velocity *= random.choice([-1, 1])
         # Handle laser indicators
         for indicator_tuple in self.laser_indicators[:]:
             indicator_id, y, timer = indicator_tuple
