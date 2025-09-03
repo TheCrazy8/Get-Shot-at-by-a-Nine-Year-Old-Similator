@@ -65,23 +65,7 @@ class bullet_hell_game:
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
-        self.highscore = self.load_highscore()  # Load high score
-        self.highscore_text = self.canvas.create_text(70, 50, text=f"High Score: {self.highscore}", fill="gold", font=("Arial", 16))
         self.update_game()
-
-    def load_highscore(self):
-        try:
-            with open("highscore.txt", "r") as f:
-                return int(f.read())
-        except:
-            return 0
-
-    def save_highscore(self):
-        try:
-            with open("highscore.txt", "w") as f:
-                f.write(str(self.highscore))
-        except:
-            pass
 
     def restart_game(self, event=None):
         if not self.game_over:
@@ -121,7 +105,6 @@ class bullet_hell_game:
         self.lastdial = time.time()
         self.paused_time_total = 0
         self.pause_start_time = None
-        self.highscore_text = self.canvas.create_text(70, 50, text=f"High Score: {self.highscore}", fill="gold", font=("Arial", 16))
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -373,12 +356,9 @@ class bullet_hell_game:
         self.graze_effect_id = self.canvas.create_oval(
             cx - self.grazing_radius, cy - self.grazing_radius,
             cx + self.grazing_radius, cy + self.grazing_radius,
-            outline="#bfff00", dash=(5, 5), width=3
+            outline="white", dash=(5, 5), width=2
         )
-        self.canvas.itemconfig(self.player, fill="#bfff00")
-        self.root.after(100, lambda: self.canvas.itemconfig(self.player, fill="white"))
-        self.root.after(100, lambda: self.canvas.delete(self.graze_effect_id))
-        # ...existing code...
+        self.graze_effect_timer = 4  # Number of update cycles to show (200ms)
 
     def check_graze(self, bullet):
         # Returns True if bullet grazes player (close but not colliding)
@@ -438,7 +418,7 @@ class bullet_hell_game:
         # Calculate time survived, pausable
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
-        self.canvas.itemconfig(self.highscore_text, text=f"High Score: {self.highscore}")
+        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
 
         # Lower values mean higher spawn rate
         bullet_chance = max(4, 30 - self.difficulty)
@@ -840,24 +820,13 @@ class bullet_hell_game:
                 bullet_coords[3] > player_coords[1] and
                 bullet_coords[1] < player_coords[3])
 
-    def flash_screen(self):
-        # Simple white flash effect
-        flash = self.canvas.create_rectangle(0, 0, self.width, self.height, fill="white", stipple="gray50")
-        self.root.after(100, lambda: self.canvas.delete(flash))
-
     def end_game(self):
         self.game_over = True
         time_survived = int(time.time() - self.timee - self.paused_time_total)
-        # High score logic
-        if self.score > self.highscore:
-            self.highscore = self.score
-            self.save_highscore()
         self.canvas.create_text(self.width//2, self.height//2-50, text="Game Over", fill="white", font=("Arial", 30))
         self.canvas.create_text(self.width//2, self.height//2, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
         self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
-        self.canvas.create_text(self.width//2, self.height//2+80, text=f"High Score: {self.highscore}", fill="gold", font=("Arial", 18))
-        self.canvas.create_text(self.width//2, self.height//2+120, text="Press R to Restart", fill="yellow", font=("Arial", 18))
-        self.flash_screen()  # Add flash effect on game over
+        self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
         self.root.bind("r", self.restart_game)
 
 if __name__ == "__main__":
