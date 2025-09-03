@@ -5,14 +5,8 @@ import pygame
 import sys
 import os
 import math
-from google.cloud import runtimeconfig
-
-client = runtimeconfig.RuntimeConfigClient()
-# Replace with your project and config details
-variable_path = client.variable_path("your-project-id", "your-config-name", "your-variable-name")
-variable = client.get_variable(name=variable_path)
-variable_value = variable.value.decode('utf-8')
-print(f"Cloud variable value: {variable_value}")
+import firebase_admin
+from firebase_admin import credentials, db
 
 class bullet_hell_game:
     def __init__(self, root):
@@ -74,6 +68,22 @@ class bullet_hell_game:
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
         self.update_game()
+        # Initialize Firebase app
+        self.cred = credentials.Certificate('serviceAccountKey.json')
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'https://YOUR_PROJECT_ID.firebaseio.com'
+        })
+
+    def set_cloud_variable(self, name, value):
+        ref = db.reference(f'variables/{name}')
+        ref.set(value)
+        print(f"Set {name} = {value}")
+
+    def get_cloud_variable(self, name):
+        ref = db.reference(f'variables/{name}')
+        value = ref.get()
+        print(f"Got {name} = {value}")
+        return value
 
     def restart_game(self, event=None):
         if not self.game_over:
