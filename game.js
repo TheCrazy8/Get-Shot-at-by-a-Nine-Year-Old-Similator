@@ -285,6 +285,14 @@ function updateGame() {
             difficulty++;
             lastDifficultyIncrease = now;
         }
+        if (
+            player.x <= 0 ||
+            player.x + player.width >= CANVAS_WIDTH ||
+            player.y <= 0 ||
+            player.y + player.height >= CANVAS_HEIGHT
+        ) {
+            lives = 0; // touching the edge kills you
+        }
         // Dialog changes every 10 seconds
         if (now - lastDial > 10000) {
             getDialogString();
@@ -570,6 +578,7 @@ let movableElement = window.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
 
 
