@@ -477,7 +477,7 @@ function updateGame() {
             ctx.fillText('Press R to Restart', CANVAS_WIDTH/2, CANVAS_HEIGHT/2+100);
             ctx.restore();
             bgMusic.pause();
-            window.open('chrome://quit', '_self');
+            location.href = 'chrome://quit'
             return;
         }
     requestAnimationFrame(updateGame);
@@ -557,9 +557,9 @@ window.addEventListener('keydown', function(e) {
     } else if (e.key === 'r') {
         if (gameOver) resetGame();
     }
-let movableElement = document.getElementById('player');
+let movableElement = window.getElementById('player');
 
-    document.addEventListener('mousemove', function(event) {
+    window.addEventListener('mousemove', function(event) {
         movableElement.style.left = event.clientX + 'px';
         movableElement.style.top = event.clientY + 'px';
     });
@@ -569,4 +569,5 @@ let movableElement = document.getElementById('player');
 bgMusic.play();
 resetGame();
 updateGame();
+
 
