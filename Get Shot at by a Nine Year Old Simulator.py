@@ -5,43 +5,6 @@ import pygame
 import sys
 import os
 import math
-"""================== LORE: THE RIFT & J ==================
-The Rift Between Time and Space:
-    A neon, vaporwave liminal grid where discarded timelines, dead realities,
-    and erased summers stack like mis‑aligned VHS tracks. Time here does not
-    flow; moments OVERLAP. The grid you see is an archival compression layer.
-
-Law of the Rift:
-    Causality is fragmented. Past can flicker forward; futures can desync
-    and collapse into static. Memory = matter. Bullets are NOT damage—they are
-    overwriting packets attempting to assimilate foreign anomalies (you).
-
-J, The Immortal Child:
-    Age 9 forever because their origin timeline never fully "committed".
-    The bureaucracy of the Rift refuses to purge the corrupted entry, so J
-    persists—half ghost, half cached process. They play at hunting you; in
-    their looping mind it's a game, but subconsciously they believe beating you
-    might finally let them grow up or escape. (May be delusion.)
-
-Memory Fragments:
-    Each escalation / pattern unlock = a shard of places that never opened:
-    shuttered neon malls, endless summer evenings, concerts held after the
-    attendees were erased. As difficulty unlocks, the Rift stitches in noisier
-    fragments; J destabilizes and slips between playful & uncanny.
-
-Hidden Signals (implemented gradually):
-    * Graffiti: THE CHILD IS OLDER THAN THE GRID
-    * Whisper layers: Distant, desynced parental calls for J
-    * Static silhouettes at the periphery (future enhancement)
-    * Possible late reveal: You & J both anomalies; a Warden process wants
-        BOTH removed if stability risk spikes.
-
-Tone Hooks:
-    This baseline blends playful + eerie. Can branch toward:
-        - Horror / analog nightmare (increase distortion lines, harsher whispers)
-        - Tragic / surreal loneliness (more wistful fragment text, fewer threats)
-    (Request variant and additional strings can be injected easily.)
-========================================================="""
 try:
     # Optional Steam Input (Steamworks) support
     from steamworks import STEAMWORKS
@@ -190,66 +153,6 @@ class bullet_hell_game:
             'split': 240
         }
         self.update_game()
-        # -------- Lore system init (lightweight, non-intrusive) --------
-        self.lore_enabled = True
-        self.last_lore_time = 0  # will trigger soon after start
-        self.lore_interval = 14  # seconds between ambient lore drops
-        self.unlocked_patterns = set()
-        self.active_lore_texts = []  # [(text_id, life, kind)] life in frames
-        # Base lore pools
-        self.lore_memory_fragments = [
-            "Fragment: An atrium mall that never opened.",
-            "Fragment: Sunset frozen behind a glass food court.",
-            "Fragment: Arcade cabinets humming with no high scores.",
-            "Fragment: A summer evening looped until the tape warped.",
-            "Fragment: Concert applause recorded over static.",
-            "Fragment: Maintenance bots polishing erased storefronts.",
-            "Fragment: Escalators carrying ghosts of intention.",
-            "Fragment: VHS palm trees bending in compression artifacts.",
-            "Fragment: Neon sale signs for products unreleased.",
-            "Fragment: A carousel still buffering its horses." 
-        ]
-        self.lore_whispers = [
-            "whisper: j...? dinner's getting cold...",
-            "whisper: we can go to the park tomorrow... promise...",
-            "whisper: hold still— we almost have you restored...",
-            "whisper: checksum mismatch— retain the child—",
-            "whisper: it's not your fault...",
-            "whisper: birthday deferred again...",
-            "whisper: anomaly flagged...",
-        ]
-        self.lore_graffiti = [
-            "THE CHILD IS OLDER THAN THE GRID",
-            "TIME STACKS; MIND CRACKS",
-            "J IS A PROCESS LOOP",
-            "WHO CURATES THE CURATOR?",
-            "IF YOU LEAVE, THE RIFT UNRAVELS",
-            "CACHE THE CHILD // DO NOT COMMIT",
-        ]
-        # Pattern-specific flavor displayed once at first unlock
-        self.pattern_lore = {
-            'horizontal': "Memory shifts sideways—horizontal drift engaged.",
-            'diag': "Angles shear the tape: diagonal desync detected.",
-            'triangle': "Triadic shard: stability forming corners.",
-            'quad': "Cluster echo: fourfold redundancy attempt.",
-            'zigzag': "Zig memory sawtooth corruption visualized.",
-            'fast': "Throughput spike— packets accelerate.",
-            'rect': "Wide bandwidth slab allocated.",
-            'star': "Five-point indexing marker recovered.",
-            'egg': "Encapsulation shell: aborted entity gestation.",
-            'boss': "Large fragment defragmenter routine active.",
-            'bouncing': "Rebound logic testing collision grid.",
-            'exploding': "Splitting sector—fragmentation cascade.",
-            'laser': "Linear purge sweep authorized.",
-            'homing': "Adaptive seek packets deployed.",
-            'spiral': "Spiral pointer chasing null origin.",
-            'radial': "Burst diffusion of orphaned frames.",
-            'wave': "Sinus carrier modulation online.",
-            'boomerang': "Recall protocol – failed deletion returns.",
-            'split': "Recursive packet division attempt." 
-        }
-        # (Optional future: tone variants) placeholder flag
-        self.lore_tone = "neutral"  # can be 'horror' or 'tragic' later
 
     # -------------- Gamepad / Steam Input Support --------------
     def init_steam_input(self):
@@ -545,8 +448,6 @@ class bullet_hell_game:
             return f"#{cv[0]:02x}{cv[1]:02x}{cv[2]:02x}"
         bg_col = _interp_color(c1, c2, phase)
         self.canvas.configure(bg=bg_col)
-    # Track current bg for lore fade blending if desired
-        self.current_bg_color = bg_col
         # Compute contrasting base colors for grid lines based on background luminance.
         br = int(bg_col[1:3],16)
         bg_g = int(bg_col[3:5],16)
@@ -690,16 +591,6 @@ class bullet_hell_game:
             'split': 240
         }
         self.update_game()
-        # Reset lore state
-        if hasattr(self, 'active_lore_texts'):
-            for tid, _, _ in self.active_lore_texts:
-                try:
-                    self.canvas.delete(tid)
-                except Exception:
-                    pass
-        self.active_lore_texts = []
-        self.last_lore_time = 0
-        self.unlocked_patterns = set()
 
     def shoot_quad_bullet(self):
         if not self.game_over:
@@ -1093,11 +984,11 @@ class bullet_hell_game:
             self.get_dialog_string()
             self.lastdial = now
             self.canvas.itemconfig(self.dialog, text=self.dial)
-    # Calculate time survived, pausable
+        # Calculate time survived, pausable
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
-    # Compute next unlock pattern
+        # Compute next unlock pattern
         remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
         if remaining_candidates:
             # Pick soonest
@@ -1106,16 +997,6 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
         else:
             self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
-        # Lore: detect freshly unlocked patterns and display one-off fragment
-        if self.lore_enabled:
-            for pat, req in self.unlock_times.items():
-                if time_survived >= req and pat not in self.unlocked_patterns:
-                    self.unlocked_patterns.add(pat)
-                    if pat in self.pattern_lore:
-                        self.display_lore_text(self.pattern_lore[pat], kind="pattern")
-            # Periodic ambient lore
-            if time_survived - self.last_lore_time >= self.lore_interval:
-                self.maybe_trigger_lore(time_survived)
 
         # Fixed spawn chances (1 in N each frame after unlock)
         bullet_chance = 18
@@ -1770,9 +1651,6 @@ class bullet_hell_game:
                 self.show_graze_effect()
 
         self.root.after(50, self.update_game)
-        # After scheduling next frame, process lore fade (runs every loop)
-        if self.lore_enabled and self.active_lore_texts:
-            self._update_lore_fade()
 
     def check_collision(self, bullet):
         bullet_coords = self.canvas.coords(bullet)
@@ -1790,93 +1668,6 @@ class bullet_hell_game:
         self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
         self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
         self.root.bind("r", self.restart_game)
-
-    # ---------------- Lore System Methods ----------------
-    def maybe_trigger_lore(self, time_survived):
-        """Randomly choose a lore fragment category and display it."""
-        self.last_lore_time = time_survived
-        roll = random.random()
-        # Weighted: memory 0.7, whisper 0.2, graffiti 0.1
-        if roll < 0.7 and self.lore_memory_fragments:
-            txt = random.choice(self.lore_memory_fragments)
-            self.display_lore_text(txt, kind="memory")
-        elif roll < 0.9 and self.lore_whispers:
-            txt = random.choice(self.lore_whispers)
-            self.display_lore_text(txt, kind="whisper")
-        else:
-            txt = random.choice(self.lore_graffiti)
-            self.display_lore_text(txt, kind="graffiti")
-
-    def display_lore_text(self, text, kind="memory"):
-        """Create a transient lore text element with gentle fade-out.
-        kind tags allow future styling (horror/tragic variants)."""
-        if not self.lore_enabled:
-            return
-        # Position: memory center-ish, whisper near top edge, graffiti near sides
-        if kind == "whisper":
-            x = self.width//2 + random.randint(-200,200)
-            y = random.randint(40, 140)
-            color = "#ccccee"
-        elif kind == "graffiti":
-            x = random.choice([random.randint(80, self.width//3), random.randint(self.width*2//3, self.width-80)])
-            y = random.randint(self.height//3, self.height-140)
-            color = "#88ffcc"
-        elif kind == "pattern":
-            x = self.width//2
-            y = self.height//2 + random.randint(-180,180)
-            color = "#ffd580"
-        else:  # memory
-            x = self.width//2
-            y = self.height//2 + random.randint(-120,120)
-            color = "#a0d4ff"
-        tid = self.canvas.create_text(x, y, text=text, fill=color, font=("Arial", 16), justify="center", width=int(self.width*0.6))
-        # Lore items fade over ~5 seconds (life measured in update frames: 50ms/frame)
-        life_frames = 100
-        self.active_lore_texts.append((tid, life_frames, kind))
-        self.canvas.tag_lower(tid)  # behind HUD
-        # Keep player / HUD on top
-        self.canvas.lift(self.player)
-        self.canvas.lift(self.dialog)
-        self.canvas.lift(self.scorecount)
-        self.canvas.lift(self.timecount)
-        if hasattr(self, 'next_unlock_text'):
-            self.canvas.lift(self.next_unlock_text)
-
-    def _update_lore_fade(self):
-        """Reduce life counters and adjust color toward background for fade."""
-        new_items = []
-        for tid, life, kind in self.active_lore_texts:
-            life -= 1
-            if life <= 0:
-                try:
-                    self.canvas.delete(tid)
-                except Exception:
-                    pass
-                continue
-            # Simple fade: interpolate color brightness
-            try:
-                current = self.canvas.itemcget(tid, 'fill')
-                # Parse #rrggbb
-                if current.startswith('#') and len(current) == 7:
-                    r = int(current[1:3],16)
-                    g = int(current[3:5],16)
-                    b = int(current[5:7],16)
-                    fade_factor = life / 100  # 1 -> 0
-                    # Blend toward background (default black if not tracked)
-                    if hasattr(self, 'current_bg_color'):
-                        br = int(self.current_bg_color[1:3],16)
-                        bg = int(self.current_bg_color[3:5],16)
-                        bb = int(self.current_bg_color[5:7],16)
-                    else:
-                        br=bg=bb=0
-                    nr = int(br + (r - br) * fade_factor)
-                    ng = int(bg + (g - bg) * fade_factor)
-                    nb = int(bb + (b - bb) * fade_factor)
-                    self.canvas.itemconfig(tid, fill=f"#{nr:02x}{ng:02x}{nb:02x}")
-            except Exception:
-                pass
-            new_items.append((tid, life, kind))
-        self.active_lore_texts = new_items
 
 if __name__ == "__main__":
     root = tk.Tk()
