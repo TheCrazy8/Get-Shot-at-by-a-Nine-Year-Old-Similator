@@ -7,7 +7,7 @@ import os
 import math
 
 class bullet_hell_game:
-    def __init__(self, root):
+    def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
         pygame.mixer.init()
         try:
@@ -27,6 +27,10 @@ class bullet_hell_game:
         self.height = self.root.winfo_height()
         self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
+        # Store customizable background color change interval (seconds)
+        self.bg_color_interval = bg_color_interval
+        # Initialize animated vaporwave grid background
+        self.init_background()
         self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
         self.bullets = []
         self.bullets2 = []
@@ -44,7 +48,7 @@ class bullet_hell_game:
         self.bouncing_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
-    # New bullet type state containers
+        # New bullet type state containers
         self.homing_bullets = []      # [(bullet_id, vx, vy)] homing towards player
         self.spiral_bullets = []      # [(bullet_id, angle, radius, ang_speed, rad_speed,   cx, cy)]
         self.radial_bullets = []      # [(bullet_id, vx, vy)] spawned in bursts
@@ -112,6 +116,118 @@ class bullet_hell_game:
             'radial': 195
         }
         self.update_game()
+
+    # ---------------- Vaporwave background setup ----------------
+    def init_background(self):
+        # Parameters
+        self.bg_color_cycle = ["#0d0221", "#1a0533", "#32054e", "#4b0a67", "#6d117b", "#8f1f85", "#b1387f", "#d25872"]
+        self.bg_cycle_index = 0
+        self.bg_last_color_change = time.time()
+    # self.bg_color_interval is set in __init__ (customizable)
+        self.grid_line_color = "#6d117b"
+        self.grid_h_lines = []
+        self.grid_v_lines = []
+        self.grid_depth = 40  # number of perspective rows
+        self.grid_scroll_speed = 0.6
+        self.grid_vertical_count = 18
+        self.grid_perspective_power = 1.55
+        self.grid_base_y = self.height * 0.55
+        self.grid_horizon_y = self.height * 0.15
+        self.grid_glow_cycle = 0.0
+        # Clear any prior lines (if restarting)
+        # (Canvas cleared by caller on restart)
+        self._create_grid_lines()
+
+    def _create_grid_lines(self):
+        # Create horizontal perspective lines (closer lines farther apart toward bottom)
+        self.grid_h_lines.clear()
+        for i in range(self.grid_depth):
+            t = i / (self.grid_depth - 1)
+            # Interpolate between horizon and base with power for perspective
+            y = self.grid_horizon_y + (self.grid_base_y - self.grid_horizon_y) * (t ** self.grid_perspective_power)
+            line = self.canvas.create_line(0, y, self.width, y, fill=self.grid_line_color, width=1)
+            self.grid_h_lines.append((line, t))
+        # Create vertical lines using perspective convergence
+        self.grid_v_lines.clear()
+        for j in range(self.grid_vertical_count):
+            x_norm = j / (self.grid_vertical_count - 1)
+            x_screen = x_norm * self.width
+            line = self.canvas.create_line(x_screen, self.grid_base_y, self.width/2, self.grid_horizon_y, fill=self.grid_line_color, width=1)
+            self.grid_v_lines.append((line, x_norm))
+
+    def update_background(self):
+        now = time.time()
+        # Color cycle
+        if now - self.bg_last_color_change > self.bg_color_interval:
+            self.bg_cycle_index = (self.bg_cycle_index + 1) % len(self.bg_color_cycle)
+            self.bg_last_color_change = now
+        # Interpolate background color to next
+        next_index = (self.bg_cycle_index + 1) % len(self.bg_color_cycle)
+        phase = (now - self.bg_last_color_change) / self.bg_color_interval
+        phase = max(0.0, min(1.0, phase))
+        c1 = self.bg_color_cycle[self.bg_cycle_index]
+        c2 = self.bg_color_cycle[next_index]
+        def _interp_color(a, b, t):
+            av = int(a[1:3],16), int(a[3:5],16), int(a[5:7],16)
+            bv = int(b[1:3],16), int(b[3:5],16), int(b[5:7],16)
+            cv = tuple(int(av[i] + (bv[i]-av[i])*t) for i in range(3))
+            return f"#{cv[0]:02x}{cv[1]:02x}{cv[2]:02x}"
+        bg_col = _interp_color(c1, c2, phase)
+        self.canvas.configure(bg=bg_col)
+        # Glow/pulse factor for line brightness
+        self.grid_glow_cycle += 0.05
+        glow = (math.sin(self.grid_glow_cycle) + 1)/2  # 0..1
+        # Update horizontal lines to scroll downward; wrap to top with new perspective
+        new_h_lines = []
+        for line_id, t in self.grid_h_lines:
+            # Move line by scroll speed scaled by its depth (closer lines move faster)
+            depth_factor = (t ** self.grid_perspective_power)
+            dy = self.grid_scroll_speed * (0.3 + depth_factor*2)
+            x1, y1, x2, y2 = self.canvas.coords(line_id)
+            y1 += dy
+            y2 += dy
+            # If line passes base, wrap to horizon
+            if y1 > self.grid_base_y + 4:
+                # Reinsert near horizon
+                y1 = self.grid_horizon_y + 2
+                y2 = y1
+            self.canvas.coords(line_id, 0, y1, self.width, y2)
+            color_mix = _interp_color("#ff66cc", "#66ccff", t)
+            # Apply glow and depth fade
+            # Convert color_mix to rgb, apply brightness
+            r = int(color_mix[1:3],16)
+            g = int(color_mix[3:5],16)
+            b = int(color_mix[5:7],16)
+            brightness = 0.4 + 0.6*glow*(1-t)
+            r = min(255, int(r*brightness))
+            g = min(255, int(g*brightness))
+            b = min(255, int(b*brightness))
+            self.canvas.itemconfig(line_id, fill=f"#{r:02x}{g:02x}{b:02x}")
+            new_h_lines.append((line_id, t))
+        self.grid_h_lines = new_h_lines
+        # Update vertical lines endpoints (converge to horizon point; base y stable, color pulse)
+        horizon_x = self.width/2
+        new_v_lines = []
+        for line_id, x_norm in self.grid_v_lines:
+            base_x = x_norm * self.width
+            self.canvas.coords(line_id, base_x, self.grid_base_y, horizon_x, self.grid_horizon_y)
+            # Color gradient across X
+            color_mix = _interp_color("#ff66cc", "#66ccff", x_norm)
+            r = int(color_mix[1:3],16)
+            g = int(color_mix[3:5],16)
+            b = int(color_mix[5:7],16)
+            brightness = 0.55 + 0.45*glow
+            r = min(255, int(r*brightness))
+            g = min(255, int(g*brightness))
+            b = min(255, int(b*brightness))
+            self.canvas.itemconfig(line_id, fill=f"#{r:02x}{g:02x}{b:02x}")
+            new_v_lines.append((line_id, x_norm))
+        self.grid_v_lines = new_v_lines
+        # Send lines to back so gameplay elements appear above
+        for line_id, _ in self.grid_h_lines:
+            self.canvas.tag_lower(line_id)
+        for line_id, _ in self.grid_v_lines:
+            self.canvas.tag_lower(line_id)
         
     def restart_game(self, event=None):
         if not self.game_over:
@@ -119,6 +235,8 @@ class bullet_hell_game:
         # Clear canvas
         for item in self.canvas.find_all():
             self.canvas.delete(item)
+        # Recreate background grid before gameplay elements
+        self.init_background()
         # Recreate player and HUD
         self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
         # Reset bullet containers
@@ -497,6 +615,8 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        # Background animation
+        self.update_background()
         self.canvas.lift(self.dialog)
         self.canvas.lift(self.scorecount)
         self.canvas.lift(self.timecount)
