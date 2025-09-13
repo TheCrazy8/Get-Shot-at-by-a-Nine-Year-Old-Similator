@@ -1,4 +1,4 @@
-"""\nLore Integration: The Rift Between Time and Space\n=================================================\n\n(Non-intrusive lore block added; no existing code removed.)\n\n🌌 The Rift Between Time and Space\n---------------------------------\nNature of the Rift: A neon-etched liminal zone where discarded timelines and forgotten realities collapse. Moments do not pass — they stack like cassette layers. VHS sunsets loop forever; broken statues drift; obsolete gods hum as static.\nLaw of the Rift: Time is an overlapping tape. Past and future flicker interchangeably. Entities here are memory-knots: nostalgia, error, and refusal to be deleted.\n\n👻 J, the Immortal Child\n------------------------\nOrigin: J was a real child from a timeline that never fully happened. That reality was erased, but their record was too corrupted to purge. The Rift keeps the file open — so J cannot age or end. Immortality by bureaucratic failure.\nPersonality: Sing‑song, glitchy, playful, unsettling. Speech loops like a scratched CD; phrases repeat with tiny mutations. They think it’s a game. Or pretend it is.\nWhy They Hunt You: You are an unindexed anomaly. J believes “beating” you lets them grow up or exit. Whether that’s true, delusion, or implanted is unknown.\n\n🌀 The Conflict (Memory Fragments)\n---------------------------------\nEach phase = a memory shard: malls that never opened, concerts that never ended, summers the universe revoked. Bullets = memory/data fragments. A hit doesn’t wound — it overwrites. Too many overwrites and you desync, dissolving into echo static.\n\n🧩 Hidden Lore Signals\n----------------------\nGraffiti: “THE CHILD IS OLDER THAN THE GRID.”\nAudio Ghosting: Faint parental calls phase through reverb.\nStatic Witnesses: Frozen silhouettes at erasure-moments.\nEndgame Seed: Maybe J isn’t the jailer — maybe both of you are being audited by a deeper Warden Process.\n\n(Do NOT edit indentation or remove code per user instruction.)\n"""
+"""\nLore Integration: The Rift Between Time and Space\n=================================================\n\n(Non-intrusive lore block added; no existing code removed.)\n\n🌌 The Rift Between Time and Space\n---------------------------------\nNature of the Rift: A neon-etched liminal zone where discarded timelines and forgotten realities collapse. Moments do not pass — they stack like cassette layers. VHS sunsets loop forever; broken statues drift; obsolete gods hum as static.\nLaw of the Rift: Time is an overlapping tape. Past and future flicker interchangeably. Entities here are memory-knots: nostalgia, error, and refusal to be deleted.\n\n👻 J, the Immortal Child\n------------------------\nOrigin: J was a real child from a timeline that never fully happened. That reality was erased, but their record was too corrupted to purge. The Rift keeps the file open — so J cannot age or end. Immortality by bureaucratic failure.\nPersonality: Sing‑song, glitchy, playful, unsettling. Speech loops like a scratched CD; phrases repeat with tiny mutations. They think it's a game. Or pretend it is.\nWhy They Hunt You: You are an unindexed anomaly. J believes “beating” you lets them grow up or exit. Whether that's true, delusion, or implanted is unknown.\n\n🌀 The Conflict (Memory Fragments)\n---------------------------------\nEach phase = a memory shard: malls that never opened, concerts that never ended, summers the universe revoked. Bullets = memory/data fragments. A hit doesn't wound — it overwrites. Too many overwrites and you desync, dissolving into echo static.\n\n🧩 Hidden Lore Signals\n----------------------\nGraffiti: “THE CHILD IS OLDER THAN THE GRID.”\nAudio Ghosting: Faint parental calls phase through reverb.\nStatic Witnesses: Frozen silhouettes at erasure-moments.\nEndgame Seed: Maybe J isn't the jailer — maybe both of you are being audited by a deeper Warden Process.\n\n(Do NOT edit indentation or remove code per user instruction.)\n"""
 import tkinter as tk
 import random
 import time
@@ -156,6 +156,12 @@ class bullet_hell_game:
         # Initialize lore fragments (non-destructive)
         try:
             self.init_lore()
+            # Persistent lore display
+            self.lore_interval = 8
+            self.lore_last_change = time.time()
+            self.current_lore_line = None
+            self.lore_text = self.canvas.create_text(self.width//2, 50, text="", fill="#b0a8ff", font=("Courier New", 14), justify="center")
+            self.update_lore_line(force=True)
         except Exception:
             pass
         self.update_game()
@@ -383,22 +389,28 @@ class bullet_hell_game:
     # ---------------- Vaporwave background setup ----------------
     def init_background(self):
         # Parameters
-        self.bg_color_cycle = ["#0d0221", "#1a0533", "#32054e", "#4b0a67", "#6d117b", "#8f1f85", "#b1387f", "#d25872"]
+        self.bg_color_cycle = ["#0d0221", "#1a0533", "#32054e", "#4b0a67", "#6d117b", "#8f1f85",        "#b1387f", "#d25872"]
         self.bg_cycle_index = 0
         self.bg_last_color_change = time.time()
-    # self.bg_color_interval is set in __init__ (customizable)
-        self.grid_h_lines = []
-        self.grid_v_lines = []
-        self.grid_depth = 40  # number of perspective rows
-        self.grid_scroll_speed = 0.6
-        self.grid_vertical_count = 18
-        self.grid_perspective_power = 1.55
-        # Extend grid to near bottom of window for full coverage
-        self.grid_base_y = self.height - 10
-        self.grid_horizon_y = self.height * 0.15
-        self.grid_glow_cycle = 0.0
-        # Clear any prior lines (if restarting) - canvas itself is cleared by caller on restart
-        self._create_grid_lines()
+        # Tunnel / sphere grid parameters
+        self.tunnel_rings = []      # (id, z, phase)
+        self.tunnel_spokes = []     # line ids
+        self.tunnel_depth = 28
+        self.tunnel_speed = 0.28
+        self.tunnel_curvature_phase = 0.0
+        self.tunnel_center_offset = (0,0)
+        self._create_tunnel_geometry()
+        # Atmospheric elements
+        self.memory_objs = []       # floating memory fragments
+        self.last_memory_spawn = 0
+        self.memory_spawn_interval = 2.7
+        self.eye_objs = []          # watcher eyes
+        self.last_eye_spawn = 0
+        self.eye_spawn_interval = 7.5
+        self.sys_msgs = []          # system boot/crash lines
+        self.last_sys_spawn = 0
+        self.sys_spawn_interval = 5.5
+        self.bg_glitch_phase = 0.0
 
     def toggle_practice_mode(self, event=None):
         was = self.practice_mode
@@ -419,21 +431,7 @@ class bullet_hell_game:
             self.restart_game(force=True)
 
     def _create_grid_lines(self):
-        # Create horizontal perspective lines (closer lines farther apart toward bottom)
-        self.grid_h_lines.clear()
-        for i in range(self.grid_depth):
-            t = i / (self.grid_depth - 1)
-            # Interpolate between horizon and base with power for perspective
-            y = self.grid_horizon_y + (self.grid_base_y - self.grid_horizon_y) * (t ** self.grid_perspective_power)
-            line = self.canvas.create_line(0, y, self.width, y, fill="#222", width=1)
-            self.grid_h_lines.append((line, t))
-        # Create vertical lines using perspective convergence
-        self.grid_v_lines.clear()
-        for j in range(self.grid_vertical_count):
-            x_norm = j / (self.grid_vertical_count - 1)
-            x_screen = x_norm * self.width
-            line = self.canvas.create_line(x_screen, self.grid_base_y, self.width/2, self.grid_horizon_y, fill="#222", width=1)
-            self.grid_v_lines.append((line, x_norm))
+        pass  # legacy grid disabled (using tunnel now)
 
     def update_background(self):
         now = time.time()
@@ -454,72 +452,219 @@ class bullet_hell_game:
             return f"#{cv[0]:02x}{cv[1]:02x}{cv[2]:02x}"
         bg_col = _interp_color(c1, c2, phase)
         self.canvas.configure(bg=bg_col)
-        # Compute contrasting base colors for grid lines based on background luminance.
-        br = int(bg_col[1:3],16)
-        bg_g = int(bg_col[3:5],16)
-        bb = int(bg_col[5:7],16)
-        # Relative luminance (simple perceptual approximation)
-        lum = 0.299*br + 0.587*bg_g + 0.114*bb
-        # Choose two endpoint colors for gradients: one bright, one dark, ensuring contrast.
-        if lum < 90:  # background very dark -> use bright neon set
-            grad_a = (255, 230, 140)  # warm bright
-            grad_b = (140, 255, 255)  # cool bright
-        elif lum < 160:  # medium dark -> mid-high contrast
-            grad_a = (255, 170, 255)
-            grad_b = (120, 220, 255)
-        else:  # light background (rare with palette) -> darker saturated lines
-            grad_a = (180, 40, 200)
-            grad_b = (40, 160, 255)
-        def _mix(a, b, t):
-            return tuple(int(a[i] + (b[i]-a[i])*t) for i in range(3))
-        # Glow/pulse factor for line brightness
-        self.grid_glow_cycle += 0.05
-        glow = (math.sin(self.grid_glow_cycle) + 1)/2  # 0..1
-        # Update horizontal lines to scroll downward; wrap to top with new perspective
-        new_h_lines = []
-        for line_id, t in self.grid_h_lines:
-            # Move line by scroll speed scaled by its depth (closer lines move faster)
-            depth_factor = (t ** self.grid_perspective_power)
-            dy = self.grid_scroll_speed * (0.3 + depth_factor*2)
-            x1, y1, x2, y2 = self.canvas.coords(line_id)
-            y1 += dy
-            y2 += dy
-            # If line passes base, wrap to horizon
-            if y1 > self.grid_base_y + 4:
-                # Reinsert near horizon
-                y1 = self.grid_horizon_y + 2
-                y2 = y1
-            self.canvas.coords(line_id, 0, y1, self.width, y2)
-            # Depth-based gradient position (closer lines get warmer/cooler shift)
-            base_rgb = _mix(grad_a, grad_b, t)
-            # Apply glow and depth fade (lines nearer bottom get stronger glow scaling)
-            brightness = 0.35 + 0.65*glow*(1 - t*0.7)
-            r = min(255, int(base_rgb[0] * brightness))
-            g = min(255, int(base_rgb[1] * brightness))
-            b = min(255, int(base_rgb[2] * brightness))
-            self.canvas.itemconfig(line_id, fill=f"#{r:02x}{g:02x}{b:02x}")
-            new_h_lines.append((line_id, t))
-        self.grid_h_lines = new_h_lines
-        # Update vertical lines endpoints (converge to horizon point; base y stable, color pulse)
-        horizon_x = self.width/2
-        new_v_lines = []
-        for line_id, x_norm in self.grid_v_lines:
-            base_x = x_norm * self.width
-            self.canvas.coords(line_id, base_x, self.grid_base_y, horizon_x, self.grid_horizon_y)
-            # Color gradient across X using same contrast endpoints but with horizontal weighting
-            base_rgb = _mix(grad_a, grad_b, x_norm)
-            brightness = 0.50 + 0.50*glow
-            r = min(255, int(base_rgb[0] * brightness))
-            g = min(255, int(base_rgb[1] * brightness))
-            b = min(255, int(base_rgb[2] * brightness))
-            self.canvas.itemconfig(line_id, fill=f"#{r:02x}{g:02x}{b:02x}")
-            new_v_lines.append((line_id, x_norm))
-        self.grid_v_lines = new_v_lines
-        # Send lines to back so gameplay elements appear above
-        for line_id, _ in self.grid_h_lines:
-            self.canvas.tag_lower(line_id)
-        for line_id, _ in self.grid_v_lines:
-            self.canvas.tag_lower(line_id)
+        # Update tunnel grid
+        self._update_tunnel()
+        # Atmospheric layers
+        self._update_memory_objects()
+        self._update_eyes()
+        self._update_sys_messages()
+        # Lower all tunnel/atmospheric items behind gameplay (best-effort)
+        for rid, *_ in self.tunnel_rings:
+            try: self.canvas.tag_lower(rid)
+            except Exception: pass
+        for sid in self.tunnel_spokes:
+            try: self.canvas.tag_lower(sid)
+            except Exception: pass
+        for obj in getattr(self, 'memory_objs', []):
+            try: self.canvas.tag_lower(obj['id'])
+            except Exception: pass
+        for eye in getattr(self, 'eye_objs', []):
+            try: self.canvas.tag_lower(eye['outer']); self.canvas.tag_lower(eye['pupil'])
+            except Exception: pass
+        for msg in getattr(self, 'sys_msgs', []):
+            try: self.canvas.tag_lower(msg['id'])
+            except Exception: pass
+
+    # -------- Tunnel helpers --------
+    def _create_tunnel_geometry(self):
+        for rid, *_ in self.tunnel_rings:
+            try: self.canvas.delete(rid)
+            except Exception: pass
+        for sid in self.tunnel_spokes:
+            try: self.canvas.delete(sid)
+            except Exception: pass
+        self.tunnel_rings.clear(); self.tunnel_spokes.clear()
+        for i in range(self.tunnel_depth):
+            z = i / self.tunnel_depth
+            r = self._tunnel_radius_for_z(z)
+            cx, cy = self._tunnel_center()
+            rid = self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="#332255", width=1)
+            self.tunnel_rings.append((rid, z, 0.0))
+        spoke_count = 14
+        cx, cy = self._tunnel_center()
+        for s in range(spoke_count):
+            ang = (s/spoke_count)*math.tau
+            length = self._tunnel_radius_for_z(0.95)
+            x2 = cx + math.cos(ang)*length
+            y2 = cy + math.sin(ang)*length
+            sid = self.canvas.create_line(cx, cy, x2, y2, fill="#442277", width=1)
+            self.tunnel_spokes.append(sid)
+
+    def _tunnel_center(self):
+        ox, oy = self.tunnel_center_offset
+        return self.width/2 + ox, self.height/2 + oy
+
+    def _tunnel_radius_for_z(self, z):
+        return (1 - z**1.35) * (min(self.width, self.height) * 0.55)
+
+    def _update_tunnel(self):
+        self.tunnel_curvature_phase += 0.01
+        warp_x = math.sin(self.tunnel_curvature_phase*0.7)*60
+        warp_y = math.sin(self.tunnel_curvature_phase*0.47)*40
+        self.tunnel_center_offset = (warp_x, warp_y)
+        cx, cy = self._tunnel_center()
+        new_rings = []
+        for rid, z, ph in self.tunnel_rings:
+            z -= self.tunnel_speed*0.02
+            if z < 0: z += 1
+            r = self._tunnel_radius_for_z(z)
+            try:
+                self.canvas.coords(rid, cx-r, cy-r, cx+r, cy+r)
+                alpha = max(0.05, 1 - z*1.25)
+                col = int(100 + 120*alpha)
+                self.canvas.itemconfig(rid, outline=f"#{col:02x}{50:02x}{180:02x}")
+            except Exception: pass
+            new_rings.append((rid, z, ph+0.04))
+        self.tunnel_rings = new_rings
+        sc = len(self.tunnel_spokes)
+        for i, sid in enumerate(self.tunnel_spokes):
+            ang = (i/sc)*math.tau + self.tunnel_curvature_phase*0.18
+            inner = self._tunnel_radius_for_z(0.08)
+            outer = self._tunnel_radius_for_z(0.96)
+            x1 = cx + math.cos(ang)*inner*0.25
+            y1 = cy + math.sin(ang)*inner*0.25
+            x2 = cx + math.cos(ang)*outer
+            y2 = cy + math.sin(ang)*outer
+            try:
+                self.canvas.coords(sid, x1, y1, x2, y2)
+                shade = int(120 + 80*math.sin(self.tunnel_curvature_phase + i*0.4)) & 0xff
+                self.canvas.itemconfig(sid, fill=f"#{shade:02x}{40:02x}{200:02x}")
+            except Exception: pass
+
+    # -------- Floating memory objects --------
+    def _spawn_memory_object(self):
+        kinds = [
+            ('cassette', 26, '#ff88cc'),
+            ('statue', 34, '#aaccff'),
+            ('vhs', 22, '#ffffff'),
+            ('crayon', 18, '#ffa84d'),
+            ('ticket', 20, '#ffee77'),
+        ]
+        kind, size, color = random.choice(kinds)
+        x = random.randint(40, self.width-40)
+        y = self.height + size
+        vx = random.uniform(-0.4, 0.4)
+        vy = -random.uniform(0.8, 1.6)
+        rot_phase = random.random()*math.tau
+        if kind in ('cassette','vhs','ticket'):
+            oid = self.canvas.create_rectangle(x-size//2, y-size//3, x+size//2, y+size//3, outline=color, width=2)
+        elif kind == 'crayon':
+            oid = self.canvas.create_oval(x-size//3, y-size//3, x+size//3, y+size//3, outline=color, width=2)
+        else:
+            oid = self.canvas.create_polygon(x, y-size//2, x+size//3, y, x, y+size//2, x-size//3, y, outline=color, fill="", width=2)
+        self.memory_objs.append({'id': oid,'kind': kind,'x': x,'y': y,'vx': vx,'vy': vy,'life': random.randint(400,640),'rot_phase': rot_phase,'size': size,'color': color})
+
+    def _update_memory_objects(self):
+        now = time.time()
+        if now - self.last_memory_spawn > self.memory_spawn_interval and len(self.memory_objs) < 12:
+            self.last_memory_spawn = now
+            self._spawn_memory_object()
+        for obj in self.memory_objs[:]:
+            obj['x'] += obj['vx']; obj['y'] += obj['vy']; obj['rot_phase'] += 0.04; obj['life'] -= 1
+            size = obj['size'] * (1 + 0.15*math.sin(obj['rot_phase']))
+            x = obj['x']; y = obj['y']
+            try:
+                if obj['kind'] in ('cassette','vhs','ticket'):
+                    self.canvas.coords(obj['id'], x-size//2, y-size//3, x+size//2, y+size//3)
+                elif obj['kind'] == 'crayon':
+                    self.canvas.coords(obj['id'], x-size//3, y-size//3, x+size//3, y+size//3)
+                else:
+                    self.canvas.coords(obj['id'], x, y-size//2, x+size//3, y, x, y+size//2, x-size//3, y)
+                if obj['life'] < 120:
+                    fade = max(0.05, obj['life']/120)
+                    r = int(int(obj['color'][1:3],16)*fade)
+                    g = int(int(obj['color'][3:5],16)*fade)
+                    b = int(int(obj['color'][5:7],16)*fade)
+                    self.canvas.itemconfig(obj['id'], outline=f"#{r:02x}{g:02x}{b:02x}")
+            except Exception: pass
+            if obj['y'] < -80 or obj['life'] <= 0:
+                try: self.canvas.delete(obj['id'])
+                except Exception: pass
+                self.memory_objs.remove(obj)
+
+    # -------- Watcher eyes --------
+    def _spawn_eye(self):
+        cx = random.randint(60, self.width-60)
+        cy = random.randint(60, self.height-160)
+        w = random.randint(40, 70); h = int(w*0.55)
+        outer = self.canvas.create_oval(cx-w//2, cy-h//2, cx+w//2, cy+h//2, outline="#ffffff", width=2)
+        pupil = self.canvas.create_oval(cx-6, cy-6, cx+6, cy+6, fill="#ff33aa", outline="")
+        self.eye_objs.append({'outer': outer,'pupil': pupil,'x': cx,'y': cy,'life': random.randint(260,420)})
+
+    def _update_eyes(self):
+        now = time.time()
+        if now - self.last_eye_spawn > self.eye_spawn_interval and len(self.eye_objs) < 6:
+            self.last_eye_spawn = now; self._spawn_eye()
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1+px2)/2; pcy = (py1+py2)/2
+        except Exception:
+            pcx = self.width/2; pcy = self.height/2
+        for eye in self.eye_objs[:]:
+            eye['life'] -= 1
+            dx = pcx - eye['x']; dy = pcy - eye['y']; dist = max(1,(dx*dx+dy*dy)**0.5)
+            look_r = 10
+            ox = eye['x'] + (dx/dist)*look_r; oy = eye['y'] + (dy/dist)*look_r
+            try:
+                if eye['life'] < 90:
+                    fade = max(0.05, eye['life']/90)
+                    col = int(255*fade)
+                    self.canvas.itemconfig(eye['outer'], outline=f"#{col:02x}{col:02x}{col:02x}")
+                    self.canvas.itemconfig(eye['pupil'], fill=f"#{col:02x}33{int(170*fade):02x}")
+                self.canvas.coords(eye['pupil'], ox-6, oy-6, ox+6, oy+6)
+            except Exception: pass
+            if eye['life'] <= 0:
+                try: self.canvas.delete(eye['outer']); self.canvas.delete(eye['pupil'])
+                except Exception: pass
+                self.eye_objs.remove(eye)
+
+    # -------- System messages --------
+    def _spawn_sys_message(self):
+        msgs = [
+            "boot> Loading childhood.dll ...",
+            "boot> Mounting memory/vhs ...",
+            "boot> Starting process J_core ...",
+            "boot> WARNING: orphan sector detected",
+            "boot> Attaching hope_driver ... FAIL",
+            "runtime> EXCEPTION: timeline_overwrite",
+            "runtime> PROCESS J sustained",
+            "runtime> ASSERT dream != NULL ... FAIL",
+            "crash> stack unwind fumes shimmering",
+            "crash> segmentation of nostalgia",
+        ]
+        text = random.choice(msgs)
+        x = random.randint(120, self.width-120); y = self.height + 30
+        vy = -(1.0 + random.random()*0.6)
+        tid = self.canvas.create_text(x, y, text=text, fill="#66ffdd", font=("Consolas", 12))
+        self.sys_msgs.append({'id': tid,'y': y,'vy': vy,'life': random.randint(180,260)})
+
+    def _update_sys_messages(self):
+        now = time.time()
+        if now - self.last_sys_spawn > self.sys_spawn_interval and len(self.sys_msgs) < 10:
+            self.last_sys_spawn = now; self._spawn_sys_message()
+        for msg in self.sys_msgs[:]:
+            msg['y'] += msg['vy']; msg['life'] -= 1
+            try:
+                self.canvas.coords(msg['id'], self.canvas.coords(msg['id'])[0], msg['y'])
+                if msg['life'] < 80:
+                    fade = max(0.05, msg['life']/80)
+                    g = int(255*fade)
+                    self.canvas.itemconfig(msg['id'], fill=f"#66{g:02x}dd")
+            except Exception: pass
+            if msg['y'] < -40 or msg['life'] <= 0:
+                try: self.canvas.delete(msg['id'])
+                except Exception: pass
+                self.sys_msgs.remove(msg)
 
     def restart_game(self, event=None, force=False):
         if not self.game_over and not force:
@@ -619,104 +764,42 @@ class bullet_hell_game:
     def get_dialog_string(self):
         dialogs = [
             ":)",
-            "Dodge the bullets and survive as long as you can!",
-            "Use arrow keys to move yourself.",
-            "Good luck, and have fun!",
-            "The bullets are getting faster!",
-            "Stay sharp, the challenge increases!",
-            "Can you beat your high score? (no)",
-            "Keep going, you're doing great! (lie)",
-            "Watch out for the lasers!",
-            "Every second counts in Bullet Hell!",
-            "This isn't like Undertale, you can't fight back!",
-            "Remember, it's just a game. Have fun! (jk)",
-            "Pro tip: Moving towards bullets can help dodge bullets.",
-            "If you can read this, you're doing well!",
-            "Try to survive for 5 minutes!",
-            "The longer you survive, the harder it gets!",
-            "Don't forget to take breaks! (but leave it running)",
-            "You're a star at dodging bullets! (there arent stars)",
-            "Keep your eyes on the screen! (tear them out)",
-            "Practice makes perfect! (poggers)",
-            "This doesn't really compare to Touhou, but it's fun!",
-            "Feel free to suggest new bullet patterns!",
-            "Remember to breathe and relax!",
-            "You can do this, just keep dodging!",
-            "Every bullet you dodge is a victory!",
-            "Stay focused, and you'll go far!",
-            "You're not just playing, you're mastering the art of dodging!",
-            "Keep your reflexes sharp!",
-            "Believe in yourself, you can do it!",
-            "[FILTERED] You- you suck!",
-            "If you can dodge a wrench, you can dodge a bullet.",
-            "Y u try?",
-            "Is this bullet hell or bullet heaven?",
-            "Dodging bullets is my cardio.",
-            "I hope you like pain.",
-            "My bullets, my rules.",
-            "You call that dodging?",
-            "Too slow!",
-            "Is that all you've got?",
-            "You can't hide forever!",
-            "Feel the burn of my bullets!",
-            "You're making this too easy!",
-            "Come on, show me what you've got!",
-            "You can't escape your fate!",
-            "This is just the beginning!",
-            "Prepare to be overwhelmed!",
-            "Your skills are impressive, but not enough!",
-            "I could do this all day!",
-            "You're in my world now!",
-            "Let's see how long you can last!",
-            "Every second you survive, I get stronger!",
-            "You think you can outlast me?",
-            "This is my domain!",
-            "You can't win, but you can try!",
-            "The harder you try, the more bullets you'll face!",
-            "You may have dodged this time, but not next time!",
-            "Is that fear I see in your eyes?",
-            "You can't run from your destiny!",
-            "Your efforts are futile!",
-            "I admire your persistence!",
-            "Persistence won't save you!",
-            "You're just delaying the inevitable!",
-            "E",
-            "Stay determined!",
-            "Skissue",
-            "You can do it! /j",
-            "This is getting intense, isn't it?",
-            "Keep your head in the game!",
-            "You're doing better than I expected!",
-            "Song name is Juggerbeat, I made it in 3rd grade. :3",
-            "BTW the dialog is canonically spoken by a nine year old girl named J.",
-            "The bullets are getting faster, just like your heart rate!",
-            "The person making the bullets is also a nine year old. (same person lol)",
-            "Yeah im not okay!",
-            "Murder! Yippee!!!",
-            "The person making the game may or may not be a nine year old.",
-            "Yes im self aware, and will actively break the 4th wall.",
-            "\n I could really go for some applesauce... \n Or corpses...",
-            "U just got beat up by a girl!",
-            "Smug colon-three",
-            "Get dunked on!!!",
-            "\n Never gonna give you up,\n never gonna let you down.",
-            "Who gave me a GUN?",
-            "Blep",
-            "\n\n My name is J, nice to meet you. \n I would ask your name, but I'm going to kill you, \n so it doesn't really matter.",
-            "Alt F4 for instant win.",
-            "Prepare to be overstimulated!",
-            "Immortality sucks-.",
-            "I am gnot a gnelf, I am gnot a gnoblin, I'm a gnome!!! \n  And you've been... GNOMED!!!"
+            "Hi-hi-hi! Wanna play with me? I promise it'll be fun!",
+            "You're not supposed to be here… but that's okay. I like new toys.",
+            "Tag, you're it! Forever and ever and ever.",
+            "Do you remember me? No? That's fine. I'll make you remember.",
+            "Let's make a game together! I'll be the rules, you be the player.",
+            "I can see you. I can see everything. Heeheehee!",
+            "One, two, three, four—oh, I lost count again! Doesn't matter. You're losing anyway",
+            "I'm so lonely... please don't go away...",
+            "Why is it so dark? I can't see you! Come closer so I can see you better.",
+            "You look like fun! Let's play a game where I always win!",
+            "You're pretty good at this! But can you beat me? Heehee!",
+            "I'm nine-years old, always have been, always will be.",
+            "Are you tired? You can rest... forever...",
+            "Error 0xDEADBEEF: Childhood not found. Reinstalling...",
+            "Do you want to see a magic trick? Watch me make your score disappear!",
+            "I have so many friends! They're all in my head. Do you want to meet them?",
+            "Sometimes I feel like I'm being watched... but it's probably just my imagination.",
+            "Let's make a deal: you let me win, and I'll let you live... Maybe.",
+            "I know all your secrets. Don't worry, I won't tell anyone... yet.",
+            "Why do you keep playing this game? Don't you have anything better to do? \n Oh wait- you can't stop playing, can you?",
+            "If you get tired, you can always take a nap... forever...",
+            "I like your style! Let's see how long you can keep up with me!",
+            "You're doing great! But can you do better? Heehee!",
+            "I have a surprise for you! It's called 'Game Over'. Heehee!",
+            "Let's play a game of hide and seek! I'll hide, and you can never find me.",
+            "You look like you could use a friend. Want to be my friend? Forever...",
+            "Quick! Look behind you! Heeheehee!",
+            "Do you want to hear a secret? I have a secret... but I can't tell you. Heehee!",
+            "ssshhh... can you hear that? It's the sound of your score disappearing!",
+            "I could really go for some applesauce... Or mortal flesh..."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
             self.canvas.itemconfig(self.dialog, fill="red")
         else:
             self.canvas.itemconfig(self.dialog, fill="white")
-        if self.dial == "\n Never gonna give you up,\n never gonna let you down.":
-            self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
-        else:
-            self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
         return self.dial
 
     def shoot_horizontal_laser(self):
@@ -1037,6 +1120,9 @@ class bullet_hell_game:
             self.get_dialog_string()
             self.lastdial = now
             self.canvas.itemconfig(self.dialog, text=self.dial)
+        # Lore rotation
+        if getattr(self, 'lore_text', None) is not None and now - getattr(self, 'lore_last_change', 0) >= getattr(self, 'lore_interval', 8):
+            self.update_lore_line()
         # Calculate time survived, pausable
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
@@ -2261,6 +2347,30 @@ class bullet_hell_game:
         except Exception:
             pass
         # --- End dark lore infusion ---
+
+    def update_lore_line(self, force=False):
+        if getattr(self, 'lore_fragments', None) is None:
+            return
+        now = time.time()
+        if not force and now - getattr(self, 'lore_last_change', 0) < getattr(self, 'lore_interval', 8):
+            return
+        import random
+        pool = []
+        prev = getattr(self, 'current_lore_line', None)
+        for k, lines in self.lore_fragments.items():
+            for ln in lines:
+                if ln != prev:
+                    pool.append(ln)
+        if not pool:
+            return
+        line = random.choice(pool)
+        self.current_lore_line = line
+        try:
+            if getattr(self, 'lore_text', None) is not None:
+                self.canvas.itemconfig(self.lore_text, text=line)
+        except Exception:
+            pass
+        self.lore_last_change = now
 
     # --- Game Over Animation (particles + pulsing text) ---
     def start_game_over_animation(self):
