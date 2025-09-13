@@ -1,3 +1,4 @@
+"""\nLore Integration: The Rift Between Time and Space\n=================================================\n\n(Non-intrusive lore block added; no existing code removed.)\n\n🌌 The Rift Between Time and Space\n---------------------------------\nNature of the Rift: A neon-etched liminal zone where discarded timelines and forgotten realities collapse. Moments do not pass — they stack like cassette layers. VHS sunsets loop forever; broken statues drift; obsolete gods hum as static.\nLaw of the Rift: Time is an overlapping tape. Past and future flicker interchangeably. Entities here are memory-knots: nostalgia, error, and refusal to be deleted.\n\n👻 J, the Immortal Child\n------------------------\nOrigin: J was a real child from a timeline that never fully happened. That reality was erased, but their record was too corrupted to purge. The Rift keeps the file open — so J cannot age or end. Immortality by bureaucratic failure.\nPersonality: Sing‑song, glitchy, playful, unsettling. Speech loops like a scratched CD; phrases repeat with tiny mutations. They think it’s a game. Or pretend it is.\nWhy They Hunt You: You are an unindexed anomaly. J believes “beating” you lets them grow up or exit. Whether that’s true, delusion, or implanted is unknown.\n\n🌀 The Conflict (Memory Fragments)\n---------------------------------\nEach phase = a memory shard: malls that never opened, concerts that never ended, summers the universe revoked. Bullets = memory/data fragments. A hit doesn’t wound — it overwrites. Too many overwrites and you desync, dissolving into echo static.\n\n🧩 Hidden Lore Signals\n----------------------\nGraffiti: “THE CHILD IS OLDER THAN THE GRID.”\nAudio Ghosting: Faint parental calls phase through reverb.\nStatic Witnesses: Frozen silhouettes at erasure-moments.\nEndgame Seed: Maybe J isn’t the jailer — maybe both of you are being audited by a deeper Warden Process.\n\n(Do NOT edit indentation or remove code per user instruction.)\n"""
 import tkinter as tk
 import random
 import time
@@ -152,6 +153,11 @@ class bullet_hell_game:
             'boomerang': 225,
             'split': 240
         }
+        # Initialize lore fragments (non-destructive)
+        try:
+            self.init_lore()
+        except Exception:
+            pass
         self.update_game()
 
     # -------------- Gamepad / Steam Input Support --------------
@@ -711,6 +717,22 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
         else:
             self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
+        # Append occasional lore fragment (low probability) without altering primary selection
+        try:
+            if hasattr(self, 'lore_fragments'):
+                # 1 in 6 chance to append one fragment cycling categories
+                if random.randint(1,6) == 1:
+                    categories = list(self.lore_fragments.keys())
+                    if categories:
+                        cat = categories[self.lore_cycle_index % len(categories)]
+                        bucket = self.lore_fragments.get(cat, [])
+                        if bucket:
+                            frag = random.choice(bucket)
+                            # Avoid overlong string: newline separated
+                            self.dial = f"{self.dial}\n¬ {frag}"
+                            self.lore_cycle_index += 1
+        except Exception:
+            pass
         return self.dial
 
     def shoot_horizontal_laser(self):
@@ -1668,6 +1690,38 @@ class bullet_hell_game:
         self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
         self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
         self.root.bind("r", self.restart_game)
+
+    # --- Lore data (non-intrusive) ---
+    def init_lore(self):
+        # Categorized fragments derived from top-of-file lore comment.
+        # No gameplay impact; can be surfaced in dialog.
+        self.lore_fragments = {
+            'rift': [
+                "The Rift stacks moments like cassette tracks.",
+                "VHS sunsets loop over statues of obsolete gods.",
+                "Time here is a collage, not a line.",
+                "You feel layers of futures that never resolved."
+            ],
+            'j': [
+                "J hums a song that never charted in a world that never was.",
+                "A file error kept a child from deletion.",
+                "J repeats a sentence— each loop slightly skewed.",
+                "'If I win, I get to grow up,' J insists."
+            ],
+            'overwriting': [
+                "Bullets rewrite, they don't bruise.",
+                "Fragments of dead summers ricochet around you.",
+                "Avoid becoming an echo process.",
+                "Your outline fuzzes when a fragment grazes you."
+            ],
+            'ominous': [
+                "Something audits both you and J.",
+                "A deeper warden tracks corruption indices.",
+                "Graffiti: THE CHILD IS OLDER THAN THE GRID.",
+                "Static silhouettes flicker at the periphery."
+            ]
+        }
+        self.lore_cycle_index = 0
 
 if __name__ == "__main__":
     root = tk.Tk()
