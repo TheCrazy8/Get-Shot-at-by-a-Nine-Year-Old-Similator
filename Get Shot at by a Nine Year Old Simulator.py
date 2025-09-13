@@ -35,9 +35,13 @@ class bullet_hell_game:
         self.canvas.pack(fill=tk.BOTH, expand=True)
         # Store customizable background color change interval (seconds)
         self.bg_color_interval = bg_color_interval
-        # Initialize animated vaporwave grid background
+    # Initialize animated vaporwave grid background
         self.init_background()
-        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
+        # Create player (base hitbox rectangle + decorative layers)
+        self.player = None
+        self.player_deco_items = []  # decorative shape IDs (not used for collisions)
+        self.player_glow_phase = 0.0
+        self.create_player_sprite()
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
@@ -262,6 +266,91 @@ class bullet_hell_game:
         nx1 = max(0, min(self.width - width, x1 + dx))
         ny1 = max(0, min(self.height - height, y1 + dy))
         self.canvas.coords(self.player, nx1, ny1, nx1 + width, ny1 + height)
+        # Also move decorative layers to align with base
+        self.update_player_sprite_position()
+
+    # ---------------- Player fancy sprite ----------------
+    def create_player_sprite(self):
+        """Create the player base hitbox rectangle plus decorative shapes (diamond + glow)."""
+        if self.player is not None:
+            # Remove existing
+            for item in self.player_deco_items:
+                self.canvas.delete(item)
+            self.canvas.delete(self.player)
+        base_w = 20
+        base_h = 20
+        cx = self.width//2
+        cy = self.height - 40
+        self.player = self.canvas.create_rectangle(cx-base_w//2, cy-base_h//2, cx+base_w//2, cy+base_h//2, fill="white", outline="")
+        # Diamond (rotated square) around player
+        dsz = 30
+        diamond_points = [
+            cx, cy-dsz/2,
+            cx+dsz/2, cy,
+            cx, cy+dsz/2,
+            cx-dsz/2, cy
+        ]
+        diamond = self.canvas.create_polygon(diamond_points, outline="#66ccff", fill="", width=2)
+        # Inner square accent
+        isz = 10
+        inner = self.canvas.create_rectangle(cx-isz/2, cy-isz/2, cx+isz/2, cy+isz/2, outline="#ff66ff", width=2)
+        # Glow ring (oval) slightly larger, animated alpha simulated by color cycling
+        glow_r = 34
+        glow = self.canvas.create_oval(cx-glow_r/2, cy-glow_r/2, cx+glow_r/2, cy+glow_r/2, outline="#ffffff", width=2)
+        self.player_deco_items = [diamond, inner, glow]
+        # Ensure base is above background but below bullets initially
+        for item in self.player_deco_items:
+            self.canvas.tag_lower(item, self.player)
+
+    def update_player_sprite_position(self):
+        if not self.player_deco_items or self.player is None:
+            return
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        # Update diamond
+        diamond, inner, glow = self.player_deco_items
+        # Recompute diamond points keeping size
+        dsz = 30
+        self.canvas.coords(diamond,
+            cx, cy-dsz/2,
+            cx+dsz/2, cy,
+            cx, cy+dsz/2,
+            cx-dsz/2, cy)
+        isz = 10
+        self.canvas.coords(inner, cx-isz/2, cy-isz/2, cx+isz/2, cy+isz/2)
+        glow_r = 34
+        self.canvas.coords(glow, cx-glow_r/2, cy-glow_r/2, cx+glow_r/2, cy+glow_r/2)
+
+    def animate_player_sprite(self):
+        if not self.player_deco_items:
+            return
+        self.player_glow_phase += 0.15
+        diamond, inner, glow = self.player_deco_items
+        # Pulsing glow color
+        pulse = (math.sin(self.player_glow_phase) + 1)/2  # 0..1
+        # Interpolate between two colors for diamond and inner
+        def lerp_color(c1, c2, t):
+            return tuple(int(c1[i] + (c2[i]-c1[i])*t) for i in range(3))
+        d_col = lerp_color((80,180,255), (255,120,255), pulse)
+        i_col = lerp_color((255,120,255), (255,255,255), 1-pulse)
+        g_col = lerp_color((255,255,255), (120,200,255), pulse)
+        self.canvas.itemconfig(diamond, outline=f"#{d_col[0]:02x}{d_col[1]:02x}{d_col[2]:02x}")
+        self.canvas.itemconfig(inner, outline=f"#{i_col[0]:02x}{i_col[1]:02x}{i_col[2]:02x}")
+        self.canvas.itemconfig(glow, outline=f"#{g_col[0]:02x}{g_col[1]:02x}{g_col[2]:02x}")
+        # Slight rotation illusion: scale diamond size subtly
+        scale_factor = 1 + 0.05*math.sin(self.player_glow_phase*0.7)
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        dsz_base = 30
+        dsz = dsz_base * scale_factor
+        self.canvas.coords(diamond,
+            cx, cy-dsz/2,
+            cx+dsz/2, cy,
+            cx, cy+dsz/2,
+            cx-dsz/2, cy)
+
 
     # ---------------- Vaporwave background setup ----------------
     def init_background(self):
@@ -413,7 +502,9 @@ class bullet_hell_game:
         # Recreate background grid before gameplay elements
         self.init_background()
         # Recreate player and HUD
-        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
+    # Recreate fancy player sprite
+        self.player = None
+        self.create_player_sprite()
         # Reset bullet containers
         self.bullets = []
         self.bullets2 = []
@@ -830,8 +921,10 @@ class bullet_hell_game:
         used_steam = self.poll_steam_input()
         if not used_steam:
             self.poll_gamepad()
-        # Background animation
+    # Background animation
         self.update_background()
+    # Animate player decorative sprite
+        self.animate_player_sprite()
         self.canvas.lift(self.dialog)
         self.canvas.lift(self.scorecount)
         self.canvas.lift(self.timecount)
