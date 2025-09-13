@@ -44,6 +44,10 @@ class bullet_hell_game:
         self.bouncing_bullets = []
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
+    # New bullet type state containers
+        self.homing_bullets = []      # [(bullet_id, vx, vy)] homing towards player
+        self.spiral_bullets = []      # [(bullet_id, angle, radius, ang_speed, rad_speed,   cx, cy)]
+        self.radial_bullets = []      # [(bullet_id, vx, vy)] spawned in bursts
         self.score = 0
         self.timee = int(time.time())
         self.dial = "Welcome to Get Shot at by a Nine Year Old Simulator!"
@@ -91,6 +95,9 @@ class bullet_hell_game:
         self.exploded_fragments = []
         self.laser_indicators = []
         self.lasers = []
+        self.homing_bullets = []
+        self.spiral_bullets = []
+        self.radial_bullets = []
         self.score = 0
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
@@ -268,6 +275,40 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
             self.fast_bullets.append(bullet)
 
+    # ---------------- New bullet spawners ----------------
+    def shoot_homing_bullet(self):
+        """Spawn a bullet that gradually steers toward the player."""
+        if not self.game_over:
+            x = random.randint(0, self.width-20)
+            bullet = self.canvas.create_oval(x, 0, x + 16, 16, fill="#ffdd00")
+            # Start with simple downward motion; vx adjusted over time
+            self.homing_bullets.append((bullet, 0.0, 4.0))
+
+    def shoot_spiral_bullet(self):
+        """Spawn a bullet that spirals outward from a point (random near center)."""
+        if not self.game_over:
+            cx = random.randint(self.width//3, self.width*2//3)
+            cy = random.randint(60, self.height//3)
+            angle = random.uniform(0, math.tau if hasattr(math, 'tau') else 2*math.pi)
+            bullet = self.canvas.create_oval(cx-10, cy-10, cx+10, cy+10, fill="#00ff88")
+            ang_speed = 0.35  # radians per frame
+            rad_speed = 2.0 + self.difficulty/6
+            self.spiral_bullets.append((bullet, angle, 0.0, ang_speed, rad_speed, cx, cy))
+
+    def shoot_radial_burst(self):
+        """Spawn a radial burst of small bullets from a random point."""
+        if not self.game_over:
+            cx = random.randint(self.width//4, self.width*3//4)
+            cy = random.randint(80, self.height//2)
+            count = 8
+            base_speed = 3.5 + self.difficulty/5
+            for i in range(count):
+                ang = (2*math.pi / count) * i + random.uniform(-0.1, 0.1)
+                vx = math.cos(ang) * base_speed
+                vy = math.sin(ang) * base_speed
+                bullet = self.canvas.create_oval(cx-8, cy-8, cx+8, cy+8, fill="#ff00ff")
+                self.radial_bullets.append((bullet, vx, vy))
+
     def shoot_bouncing_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
@@ -436,6 +477,9 @@ class bullet_hell_game:
         egg_chance = max(10, 60 - self.difficulty * 2)
         bouncing_chance = max(15, 90 - self.difficulty * 2)
         exploding_chance = max(20, 100 - self.difficulty * 2)
+        homing_chance = max(25, 140 - self.difficulty * 4)
+        spiral_chance = max(30, 160 - self.difficulty * 5)
+        radial_chance = max(40, 200 - self.difficulty * 6)
 
         if random.randint(1, bullet_chance) == 1:
             self.shoot_bullet()
@@ -465,6 +509,12 @@ class bullet_hell_game:
             self.shoot_bouncing_bullet()
         if random.randint(1, exploding_chance) == 1:
             self.shoot_exploding_bullet()
+        if random.randint(1, homing_chance) == 1:
+            self.shoot_homing_bullet()
+        if random.randint(1, spiral_chance) == 1:
+            self.shoot_spiral_bullet()
+        if random.randint(1, radial_chance) == 1:
+            self.shoot_radial_burst()
         # Move triangle bullets
         triangle_speed = 7 + self.difficulty // 2
         for bullet_tuple in self.triangle_bullets[:]:
@@ -609,6 +659,7 @@ class bullet_hell_game:
         rect_speed = 8 + self.difficulty // 2
         quad_speed = 6 + self.difficulty // 2
         egg_speed = 5 + self.difficulty // 3
+        homing_speed = 5.5 + self.difficulty / 3
 
         # Move vertical bullets
         for bullet in self.bullets[:]:
@@ -809,6 +860,99 @@ class bullet_hell_game:
             if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(rect_bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move homing bullets ----------------
+        for hb_tuple in self.homing_bullets[:]:
+            bullet, vx, vy = hb_tuple
+            # Compute vector toward player center
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2)/2
+            pcy = (py1 + py2)/2
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            bcx = (bx1 + bx2)/2
+            bcy = (by1 + by2)/2
+            dx = pcx - bcx
+            dy = pcy - bcy
+            dist = math.hypot(dx, dy) or 1
+            # Normalize and apply steering (lerp velocities)
+            target_vx = dx / dist * homing_speed
+            target_vy = dy / dist * homing_speed
+            steer_factor = 0.15  # how quickly it turns
+            vx = vx * (1 - steer_factor) + target_vx * steer_factor
+            vy = vy * (1 - steer_factor) + target_vy * steer_factor
+            self.canvas.move(bullet, vx, vy)
+            # Update tuple
+            idx = self.homing_bullets.index(hb_tuple)
+            self.homing_bullets[idx] = (bullet, vx, vy)
+            # Collision / out of bounds
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.homing_bullets.remove((bullet, vx, vy))
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                coords = self.canvas.coords(bullet)
+                if not coords or coords[1] > self.height or coords[0] < -40 or coords[2] > self.width + 40:
+                    self.canvas.delete(bullet)
+                    self.homing_bullets.remove((bullet, vx, vy))
+                    self.score += 3
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move spiral bullets ----------------
+        for sp_tuple in self.spiral_bullets[:]:
+            bullet, angle, radius, ang_speed, rad_speed, cx, cy = sp_tuple
+            angle += ang_speed
+            radius += rad_speed
+            x = cx + math.cos(angle) * radius
+            y = cy + math.sin(angle) * radius
+            size = 20
+            self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
+            # Collision & removal
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+                continue
+            if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                self.score += 2
+                continue
+            # Update tuple
+            idx = self.spiral_bullets.index(sp_tuple)
+            self.spiral_bullets[idx] = (bullet, angle, radius, ang_speed, rad_speed, cx, cy)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move radial burst bullets ----------------
+        for rb_tuple in self.radial_bullets[:]:
+            bullet, vx, vy = rb_tuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                self.score += 1
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
 
         self.root.after(50, self.update_game)
