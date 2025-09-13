@@ -41,6 +41,7 @@ class bullet_hell_game:
         self.player = None
         self.player_deco_items = []  # decorative shape IDs (not used for collisions)
         self.player_glow_phase = 0.0
+        self.player_rgb_phase = 0.0  # for rainbow fill
         self.create_player_sprite()
         self.bullets = []
         self.bullets2 = []
@@ -326,6 +327,7 @@ class bullet_hell_game:
         if not self.player_deco_items:
             return
         self.player_glow_phase += 0.15
+        self.player_rgb_phase += 0.02
         diamond, inner, glow = self.player_deco_items
         # Pulsing glow color
         pulse = (math.sin(self.player_glow_phase) + 1)/2  # 0..1
@@ -350,6 +352,26 @@ class bullet_hell_game:
             cx+dsz/2, cy,
             cx, cy+dsz/2,
             cx-dsz/2, cy)
+        # Rainbow fill for base rectangle using HSV -> RGB approximation
+        # Simple 0..1 hue wrap
+        h = self.player_rgb_phase % 1.0
+        # Convert hue to RGB (s=1,v=1) manually
+        i = int(h*6)
+        f = h*6 - i
+        q = 1 - f
+        if i % 6 == 0:
+            r,g,b = 1, f, 0
+        elif i % 6 == 1:
+            r,g,b = q, 1, 0
+        elif i % 6 == 2:
+            r,g,b = 0, 1, f
+        elif i % 6 == 3:
+            r,g,b = 0, q, 1
+        elif i % 6 == 4:
+            r,g,b = f, 0, 1
+        else:
+            r,g,b = 1, 0, q
+        self.canvas.itemconfig(self.player, fill=f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}")
 
 
     # ---------------- Vaporwave background setup ----------------
