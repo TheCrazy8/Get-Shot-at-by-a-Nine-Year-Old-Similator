@@ -793,7 +793,9 @@ class bullet_hell_game:
             "Quick! Look behind you! Heeheehee!",
             "Do you want to hear a secret? I have a secret... but I can't tell you. Heehee!",
             "ssshhh... can you hear that? It's the sound of your score disappearing!",
-            "I could really go for some applesauce... Or mortal flesh..."
+            "I could really go for some applesauce... Or mortal flesh...",
+            "Why do you keep trying? You know you'll never win against me!",
+            "Do you hear them singing? They're all my friends. They lost, too",
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
