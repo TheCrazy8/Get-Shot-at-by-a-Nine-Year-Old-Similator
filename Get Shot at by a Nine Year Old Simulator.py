@@ -54,6 +54,27 @@ class bullet_hell_game:
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
+        # Text showing next pattern unlock info
+        self.pattern_display_names = {
+            'vertical': 'Vertical',
+            'horizontal': 'Horizontal',
+            'diag': 'Diagonal',
+            'triangle': 'Triangle',
+            'quad': 'Quad Cluster',
+            'zigzag': 'ZigZag',
+            'fast': 'Fast',
+            'rect': 'Wide Rectangle',
+            'star': 'Star',
+            'egg': 'Tall Egg',
+            'boss': 'Big Boss',
+            'bouncing': 'Bouncing',
+            'exploding': 'Exploding',
+            'laser': 'Laser',
+            'homing': 'Homing',
+            'spiral': 'Spiral',
+            'radial': 'Radial Burst'
+        }
+        self.next_unlock_text = self.canvas.create_text(self.width//2, 50, text="", fill="#88ddff", font=("Arial", 16))
         self.lives = 1
         self.game_over = False
         self.paused = False
@@ -95,11 +116,12 @@ class bullet_hell_game:
     def restart_game(self, event=None):
         if not self.game_over:
             return
-        # Remove all canvas items
+        # Clear canvas
         for item in self.canvas.find_all():
             self.canvas.delete(item)
-        # Reset all game state
+        # Recreate player and HUD
         self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
+        # Reset bullet containers
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []
@@ -119,11 +141,14 @@ class bullet_hell_game:
         self.homing_bullets = []
         self.spiral_bullets = []
         self.radial_bullets = []
+        # Reset scores/timers
         self.score = 0
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
+        self.next_unlock_text = self.canvas.create_text(self.width//2, 50, text="", fill="#88ddff", font=("Arial", 16))
+        # Core state
         self.lives = 1
         self.game_over = False
         self.paused = False
@@ -133,6 +158,7 @@ class bullet_hell_game:
         self.lastdial = time.time()
         self.paused_time_total = 0
         self.pause_start_time = None
+        # Reset unlock schedule
         self.unlock_times = {
             'vertical': 0,
             'horizontal': 8,
@@ -474,6 +500,8 @@ class bullet_hell_game:
         self.canvas.lift(self.dialog)
         self.canvas.lift(self.scorecount)
         self.canvas.lift(self.timecount)
+        if hasattr(self, 'next_unlock_text'):
+            self.canvas.lift(self.next_unlock_text)
         # Move graze effect to follow player if active
         if self.graze_effect_id:
             px1, py1, px2, py2 = self.canvas.coords(self.player)
@@ -501,6 +529,15 @@ class bullet_hell_game:
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Compute next unlock pattern
+        remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
+        if remaining_candidates:
+            # Pick soonest
+            pat, secs = min(remaining_candidates, key=lambda x: x[1])
+            display = self.pattern_display_names.get(pat, pat.title())
+            self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
+        else:
+            self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
 
         # Lower values mean higher spawn rate
         bullet_chance = max(4, 30 - self.difficulty)
