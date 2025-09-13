@@ -1698,7 +1698,8 @@ class bullet_hell_game:
                 "Futures spool in reverse until they fray.",
                 "Gravity is just nostalgia remembering downward.",
                 "Loose hours drip from torn chronology seams.",
-                "YOU step through a corridor made of almosts."
+                "YOU step through a corridor made of almosts.",
+                "Computer or dream, which is the more fragile reality?"
             ],
             'j': [
                 "J hums a song that never charted in a world that never was.",
@@ -1819,6 +1820,101 @@ class bullet_hell_game:
                 "Event loop rejects exit signal (resource busy).",
                 "Profiler marks a spike labeled 'wonder'.",
                 "Finalizer prepared but object refuses scope end."
+            ],
+            'regret': [
+                "YOU almost reached them, once.",
+                "A missed shot echoes as a lost opportunity.",
+                "If only YOU had dodged differently.",
+                "Rewind, retry, but the past won't recompile.",
+                "Every graze is a near-miss with a better ending.",
+                "YOU feel the weight of unchosen paths.",
+                "Hindsight is a spectator mode YOU can't enter.",
+                "A fragment of 'what if' spins just out of reach.",
+                "The scoreboard tallies more than just points.",
+                "YOU are haunted by the ghost of a chance not taken."
+            ],
+            'time': [
+                "Time here is a looped animation with missing frames.",
+                "Seconds stretch like taffy, then snap back.",
+                "A clock with hands that sometimes point nowhere.",
+                "Temporal distortion makes distance feel like nostalgia.",
+                "You are a child.",
+                "You are a teenager.",
+                "You are a young adult.",
+                "You are an adult.",
+                "You are a middle-aged adult.",
+                "You are elderly.",
+                "You are a senior.",
+                "You are old.",
+                "You are ancient.",
+                "You are dead."
+            ],
+            'corrupted-refference': [
+                "The if cake==True is false.",
+                "It's not a bug, it's an undocumented feature.",
+                "Teapot.obj not found."
+            ],
+            'corrupted': [
+                "Reality.exe has stopped working.",
+                "A fatal error has occurred.",
+                "Segmentation fault (core dumped).",
+                "Access violation at address 0x00000000.",
+                "Stack overflow detected.",
+                "Buffer overflow: data truncated.",
+                "Null pointer dereference.",
+                "Division by zero error.",
+                "Out of memory exception.",
+                "File not found: 'existence.sys'."
+            ],
+            'heart': [
+                "A heartbeat echoes in the void.",
+                "Pulse syncs with fragmented memories.",
+                "Rhythm of life distorted by time loops.",
+                "Cardiac code compiles into silent beats.",
+                "Emotions buffer under high latency.",
+                "A thump in the dark, steady and unresolved.",
+                "Heartbeat skips, then catches up with a sigh.",
+                "Life signs flicker like a failing connection."
+            ],
+            'apparition': [
+                "A ghostly figure flickers at the edge of vision.",
+                "Whispers of forgotten code echo in the void.",
+                "An apparition of a past self reaches out.",
+                "Phantom processes haunt the system logs.",
+                "Spectral glitches ripple through the environment.",
+                "A shadowy presence observes from a parallel thread.",
+                "Ethereal shapes form and dissolve in the periphery.",
+                "A translucent figure mimics your movements."
+            ],
+            'quest': [
+                "A quest log filled with unfinished tasks.",
+                "Objectives shift like sand underfoot.",
+                "A map with routes that lead nowhere.",
+                "Side quests that loop back to the beginning.",
+                "A compass that spins wildly, pointing to lost hopes.",
+                "A journal filled with crossed-out dreams.",
+                "A mission statement that fades with each read.",
+                "A checklist of goals that grow more abstract."
+            ],
+            'zen': [
+                "In the stillness, even bullets become part of the flow.",
+                "Embrace the chaos; it is the path to understanding.",
+                "The void is not empty; it is full of potential.",
+                "Let go of control, and the game plays itself.",
+                "Every hit is a lesson; every miss, a chance to learn.",
+                "The present moment is all there is, even in an unending hell.",
+                "Find harmony in the discord of flying projectiles.",
+                "The journey is the destination, even when dodging endless bullets."
+            ],
+            'you': [
+                "You are more than just a player; you are a participant in this unfolding story.",
+                "Your choices ripple through the fabric of this reality, altering its course.",
+                "You are both the observer and the observed in this intricate dance of existence.",
+                "You carry the weight of countless possibilities, each one a thread in the tapestry of time.",
+                "You are a beacon of hope in a world that often feels like it's unraveling.",
+                "You are the sum of your experiences, both joyful and painful, shaping who you are.",
+                "You are a catalyst for change, capable of transforming even the most chaotic situations.",
+                "You are a survivor, navigating through challenges with resilience and grace."
             ]
         }
         # Normalize capitalization for lore: convert whole-word 'you'/'your' to uppercase
@@ -1959,6 +2055,165 @@ class bullet_hell_game:
         except Exception:
             pass
         # --- End additional lore expansion ---
+
+        # --- Dark lore infusion (append-only, safe merge) ---
+        try:
+            _dark_lore = {
+                'void': [
+                    "The void indexes YOUR silhouette for faster lookup.",
+                    "A NULL horizon dereferences courage.",
+                    "Background bleed removed for performance; dread leaks anyway.",
+                    "You hear a frame that never rendered.",
+                    "Cursor hovers over an absence shaped like YOU.",
+                    "Garbage collector refuses to reclaim this silence.",
+                    "Void shader compiles with experimental warnings.",
+                    "Depth buffer stores a bruise of possibility."
+                ],
+                'decay': [
+                    "Animations stutter into archaeological layers.",
+                    "Polish peels—raw prototype bone exposed.",
+                    "YOUR dodge timing fossilizes, still warm.",
+                    "Color grading oxidizes mid-transition.",
+                    "Hitbox outline frays pixel by pixel.",
+                    "Delta-time spores settle in unlit corners.",
+                    "Memory leak blooms like soft fungus.",
+                    "Decay daemon queued behind render thread."
+                ],
+                'erasure': [
+                    "A brush tool hovers—UNDO history already purged.",
+                    "Half a bullet pattern forgets its exit arc.",
+                    "YOU occupy a region scheduled for overwrite.",
+                    "Transparency grid shows through a missing promise.",
+                    "Nameplate alpha drifts toward oblivion.",
+                    "Progress autosave skipped YOUR existence diff.",
+                    "Dialogue stub: '{{player}}' unresolved token.",
+                    "Erasure runs in silent batch mode."
+                ],
+                'silence': [
+                    "Audio buffer holds a held breath at 44.1kHz.",
+                    "Reverb tail curls back to listen.",
+                    "Metronome stops—bullets keep perfect time.",
+                    "Silence negotiates exclusive fullscreen.",
+                    "A mute icon blinks like a warning heartbeat.",
+                    "Paused music accrues compound interest.",
+                    "YOUR pulse mixes down to mono.",
+                    "Silence exports as lossless dread."
+                ],
+                'autopsy': [
+                    "Stack trace unzips the last five seconds.",
+                    "A profiler overlays cause-of-death candidates.",
+                    "Bullet trajectory annotated with regret vectors.",
+                    "YOUR reaction time graphed against impossible.",
+                    "Core dump whispers partial childhood.",
+                    "Forensic shader reveals skipped frames.",
+                    "Replay scrubs over a choice that wasn't.",
+                    "Autopsy tags pin to intangible tissue."
+                ],
+                'regression': [
+                    "Feature: survival. Status: BROKEN since patch n-3.",
+                    "A fix reopened itself at dusk.",
+                    "YOU are an intermittent failure—cannot reproduce.",
+                    "Changelog omits the haunting on purpose.",
+                    "Legacy bug adopts YOUR movement keys.",
+                    "Test harness flinches at random seeds.",
+                    "Rollback script strokes a loaded version tag.",
+                    "Assertion passes; truth still falsy."
+                ],
+                'bleed': [
+                    "Particles clip through narrative membrane.",
+                    "UI panel stains beyond its mask.",
+                    "Health value underflows into symbolism.",
+                    "Shader blend mode: MULTIPLY trauma.",
+                    "YOU graze a thought and it leaves color.",
+                    "Overdraw maps a circulatory diagram.",
+                    "Screen-space ambient occlusion finds sorrow pockets.",
+                    "Bleed buffer not cleared between lives."
+                ],
+                'abyss': [
+                    "Camera easing stares too long downward.",
+                    "Parallax layer scrolls a negative infinity.",
+                    "YOU feel frustum culling on your spine.",
+                    "Depth test accepts a whisper from below.",
+                    "Abyss returns HTTP 204: content intentional.",
+                    "Edge fog computes recursive hollowness.",
+                    "Low-frequency rumble shaped like waiting.",
+                    "Z-fighting between here and never."
+                ],
+                'husk': [
+                    "Input latency puts a glove over intention.",
+                    "YOUR avatar caches an empty keyframe.",
+                    "Physics shell keeps moving; meaning despawns.",
+                    "Collision sound downgraded to placeholder.",
+                    "A hollow sprite atlas cycles politely.",
+                    "Soul component disabled (commented TODO).",
+                    "Heartbeat coroutine yields permanently.",
+                    "Husk flagged as recyclable asset."
+                ],
+                'fracture': [
+                    "Viewport splits along predictive fault lines.",
+                    "UI tween snaps mid-ease.",
+                    "YOU see double-buffer paradox ghosts.",
+                    "Geometry emits a brittle sound at rest.",
+                    "Fracture plane labels itself 'tutorial'.",
+                    "Splintered trail segments reattach wrong.",
+                    "Camera shake spells a brief apology.",
+                    "Fracture handler swallows the exception."
+                ],
+                'parasite': [
+                    "A background thread consumes idle awe.",
+                    "FPS drop disguised as adaptive drama.",
+                    "Parasite hooks into YOUR dodge invincibility.",
+                    "Unreferenced object continues blinking.",
+                    "It forges timestamps to feel historic.",
+                    "Heap inspector spots a clinging metaphor.",
+                    "Bandwidth siphoned to feed a narrative leech.",
+                    "Parasite detaches—latency remains."
+                ],
+                'rust': [
+                    "Time stamps flake into unreadable residue.",
+                    "Control bindings seize for a frame.",
+                    "Rust blooms where polish pooled.",
+                    "YOU taste ferrous UI afterimages.",
+                    "Toolchain smell seeps into dreams.",
+                    "Sprite sheet corners curl inward.",
+                    "Frame limiter skips to protect corroded joints.",
+                    "Rust daemon offers to refactor mortality."
+                ],
+                'orphan': [
+                    "Detached particle still searches its emitter.",
+                    "Orphan timer counts from an impossible zero.",
+                    "YOU inherit an unset variable of grief.",
+                    "Parent pointer cleared without ceremony.",
+                    "Menu option grays out a remembered lullaby.",
+                    "Reference cycle broken; ache persists.",
+                    "Asset bundle lists missing guardian asset.",
+                    "Orphan flag set: keep-alive indefinite."
+                ],
+                'blackout': [
+                    "Gamma collapses—contrast reveals concealed veins.",
+                    "Particles freeze mid-luminescence.",
+                    "YOU navigate purely by muscle memory.",
+                    "Failover lighting paints emergency myths.",
+                    "Shader fallback: pure interpretive void.",
+                    "Power trace loops back to a childhood socket.",
+                    "Darkness negotiates permanent tenancy.",
+                    "Blackout log appended silently."
+                ]
+            }
+            for _k,_v in _dark_lore.items():
+                if _k in self.lore_fragments:
+                    try:
+                        existing = set(self.lore_fragments[_k])
+                        for line in _v:
+                            if line not in existing:
+                                self.lore_fragments[_k].append(line)
+                    except Exception:
+                        pass
+                else:
+                    self.lore_fragments[_k] = list(_v)
+        except Exception:
+            pass
+        # --- End dark lore infusion ---
 
     # --- Game Over Animation (particles + pulsing text) ---
     def start_game_over_animation(self):
