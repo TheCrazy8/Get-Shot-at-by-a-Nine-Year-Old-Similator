@@ -35,9 +35,13 @@ class bullet_hell_game:
         self.canvas.pack(fill=tk.BOTH, expand=True)
         # Store customizable background color change interval (seconds)
         self.bg_color_interval = bg_color_interval
-        # Initialize animated vaporwave grid background
+    # Initialize animated vaporwave grid background
         self.init_background()
-        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="white")
+        # Player core hitbox (invisible) + decorative sprite
+        self.player = self.canvas.create_rectangle(self.width//2-10, self.height-50, self.width//2+10, self.height-30, fill="", outline="")
+        self.player_sprite_items = []  # aura, diamond, core
+        self.player_pulse_phase = 0.0
+        self.create_player_sprite()
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
@@ -262,6 +266,70 @@ class bullet_hell_game:
         nx1 = max(0, min(self.width - width, x1 + dx))
         ny1 = max(0, min(self.height - height, y1 + dy))
         self.canvas.coords(self.player, nx1, ny1, nx1 + width, ny1 + height)
+        self.sync_player_sprite()
+
+    # --------------- Player Sprite Helpers ---------------
+    def create_player_sprite(self):
+        # Remove old sprite
+        for it in getattr(self, 'player_sprite_items', []):
+            try: self.canvas.delete(it)
+            except Exception: pass
+        self.player_sprite_items = []
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        cx = (x1 + x2)/2
+        cy = (y1 + y2)/2
+        # Aura circle
+        aura_r = 26
+        aura = self.canvas.create_oval(cx-aura_r, cy-aura_r, cx+aura_r, cy+aura_r,
+                                       outline="#55ffff", width=2)
+        # Diamond shape
+        size = 18
+        diamond = self.canvas.create_polygon(
+            cx, cy-size/2,
+            cx+size/2, cy,
+            cx, cy+size/2,
+            cx-size/2, cy,
+            fill="#00ffee", outline="#ffffff", width=2)
+        # Inner core
+        core = self.canvas.create_oval(cx-6, cy-6, cx+6, cy+6, fill="#ffffff", outline="")
+        self.player_sprite_items = [aura, diamond, core]
+        self.sync_player_sprite()
+
+    def sync_player_sprite(self):
+        if not self.player_sprite_items:
+            return
+        aura, diamond, core = self.player_sprite_items
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        cx = (x1 + x2)/2
+        cy = (y1 + y2)/2
+        aura_r = 26
+        self.canvas.coords(aura, cx-aura_r, cy-aura_r, cx+aura_r, cy+aura_r)
+        size = 18
+        self.canvas.coords(diamond,
+            cx, cy-size/2,
+            cx+size/2, cy,
+            cx, cy+size/2,
+            cx-size/2, cy)
+        self.canvas.coords(core, cx-6, cy-6, cx+6, cy+6)
+
+    def update_player_sprite_animation(self):
+        if not self.player_sprite_items:
+            return
+        self.player_pulse_phase += 0.18
+        aura, diamond, core = self.player_sprite_items
+        pulse = (math.sin(self.player_pulse_phase)+1)/2
+        g = int(120 + 80*pulse)
+        b = 255
+        self.canvas.itemconfig(aura, outline=f"#55{g:02x}{b:02x}")
+        r = int(40 + 60*pulse)
+        self.canvas.itemconfig(diamond, fill=f"#{r:02x}ffee")
+        # Breathing core
+        base = 6
+        grow = 2*pulse
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        cx = (x1 + x2)/2
+        cy = (y1 + y2)/2
+        self.canvas.coords(core, cx-(base+grow), cy-(base+grow), cx+(base+grow), cy+(base+grow))
 
     # ---------------- Vaporwave background setup ----------------
     def init_background(self):
@@ -832,6 +900,8 @@ class bullet_hell_game:
             self.poll_gamepad()
         # Background animation
         self.update_background()
+        # Player sprite animation
+        self.update_player_sprite_animation()
         self.canvas.lift(self.dialog)
         self.canvas.lift(self.scorecount)
         self.canvas.lift(self.timecount)
