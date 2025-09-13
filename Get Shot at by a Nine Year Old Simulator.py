@@ -1672,7 +1672,94 @@ class bullet_hell_game:
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
 
+        # Mid-screen lore fragment display (spawn + blink + expire)
+        try:
+            if hasattr(self, 'maybe_show_mid_lore'):
+                self.maybe_show_mid_lore()
+            if getattr(self, '_mid_lore_items', None) is not None:
+                for item in self._mid_lore_items[:]:
+                    ids = item.get('ids', [])
+                    life = item.get('life', 0)
+                    life -= 1
+                    item['life'] = life
+                    # Blink during final 15 frames
+                    if life < 15:
+                        blink_hidden = (life % 4) in (0,1)
+                        state = 'hidden' if blink_hidden else 'normal'
+                        for oid in ids:
+                            try: self.canvas.itemconfig(oid, state=state)
+                            except Exception: pass
+                    if life <= 0:
+                        for oid in ids:
+                            try: self.canvas.delete(oid)
+                            except Exception: pass
+                        self._mid_lore_items.remove(item)
+        except Exception:
+            pass
+
         self.root.after(50, self.update_game)
+
+    def init_lore(self):
+        # Categorized fragments derived from top-of-file lore comment.
+        # No gameplay impact; can be surfaced in dialog.
+        self.lore_fragments = {
+            'rift': [
+                "The Rift stacks moments like cassette tracks.",
+                "VHS sunsets loop over statues of obsolete gods.",
+                "Time here is a collage, not a line.",
+                "You feel layers of futures that never resolved."
+            ],
+            'j': [
+                "J hums a song that never charted in a world that never was.",
+                "A file error kept a child from deletion.",
+                "J repeats a sentence— each loop slightly skewed.",
+                "'If I win, I get to grow up,' J insists."
+            ],
+            'overwriting': [
+                "Bullets rewrite, they don't bruise.",
+                "Fragments of dead summers ricochet around you.",
+                "Avoid becoming an echo process.",
+                "Your outline fuzzes when a fragment grazes you."
+            ],
+            'ominous': [
+                "Something audits both you and J.",
+                "A deeper warden tracks corruption indices.",
+                "Graffiti: THE CHILD IS OLDER THAN THE GRID.",
+                "Static silhouettes flicker at the periphery."
+            ]
+        }
+        self.lore_cycle_index = 0
+        # Ephemeral mid-screen lore overlay items (each: {'ids': [...], 'life': frames})
+        self._mid_lore_items = []
+
+    def maybe_show_mid_lore(self):
+        """Randomly spawn a transient red lore fragment with white outline near center."""
+        try:
+            if random.randint(1,180) != 1:
+                return
+            if not getattr(self, 'lore_fragments', None):
+                return
+            cat = random.choice(list(self.lore_fragments.keys()))
+            bucket = self.lore_fragments.get(cat, [])
+            if not bucket:
+                return
+            frag = random.choice(bucket)
+            x = self.width//2 + random.randint(-self.width//6, self.width//6)
+            y = self.height//2 + random.randint(-100, 100)
+            outlines = []
+            for ox, oy in [(-2,0),(2,0),(0,-2),(0,2)]:
+                oid = self.canvas.create_text(x+ox, y+oy, text=frag, fill="white", font=("Arial",18,"bold"), justify="center")
+                outlines.append(oid)
+            main_id = self.canvas.create_text(x, y, text=frag, fill="#ff2222", font=("Arial",18,"bold"), justify="center")
+            for oid in outlines:
+                try:
+                    self.canvas.tag_lower(oid, main_id)
+                except Exception:
+                    pass
+            self._mid_lore_items.append({'ids':[main_id]+outlines, 'life':60})
+        except Exception:
+            pass
+    # Do NOT schedule update loop here (main loop already schedules). Intentionally left empty.
 
     def check_collision(self, bullet):
         bullet_coords = self.canvas.coords(bullet)
@@ -1690,6 +1777,11 @@ class bullet_hell_game:
         self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
         self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
         self.root.bind("r", self.restart_game)
+        # Start game over animation loop (non-intrusive)
+        try:
+            self.start_game_over_animation()
+        except Exception:
+            pass
 
     # --- Lore data (non-intrusive) ---
     def init_lore(self):
@@ -1722,6 +1814,86 @@ class bullet_hell_game:
             ]
         }
         self.lore_cycle_index = 0
+        # Ephemeral mid-screen lore overlay items (each: {'ids': [...], 'life': frames})
+        self._mid_lore_items = []
+
+    # --- Game Over Animation (particles + pulsing text) ---
+    def start_game_over_animation(self):
+        if getattr(self, 'go_anim_active', False):
+            return
+        self.go_anim_active = True
+        self.go_anim_particles = []
+        self.go_anim_frame = 0
+        # Large pulsing overlay text (separate from static text already created)
+        try:
+            self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2-140, text="GAME OVER", fill="#ffffff", font=("Arial", 64, "bold"))
+        except Exception:
+            self.go_anim_text = None
+        # Spawn radial particles from center
+        cx = self.width//2
+        cy = self.height//2
+        for i in range(60):
+            ang = random.uniform(0, 2*math.pi)
+            spd = random.uniform(2.5, 7.0)
+            vx = math.cos(ang)*spd
+            vy = math.sin(ang)*spd
+            size = random.randint(4,10)
+            pid = self.canvas.create_oval(cx-size//2, cy-size//2, cx+size//2, cy+size//2, fill="#ff55ff", outline="")
+            # life frames ~ fade duration
+            life = random.randint(35,70)
+            self.go_anim_particles.append((pid, vx, vy, life))
+        self.update_game_over_animation()
+
+    def update_game_over_animation(self):
+        if not getattr(self, 'go_anim_active', False):
+            return
+        self.go_anim_frame += 1
+        # Pulse text color / scale
+        if self.go_anim_text is not None:
+            phase = math.sin(self.go_anim_frame * 0.18) * 0.5 + 0.5  # 0..1
+            # Interpolate color between magenta and white
+            def mix(a,b,t):
+                return int(a + (b-a)*t)
+            r = mix(255,255,phase)
+            g = mix(85,255,phase)
+            b = mix(255,255,phase)
+            try:
+                self.canvas.itemconfig(self.go_anim_text, fill=f"#{r:02x}{g:02x}{b:02x}")
+            except Exception:
+                pass
+        # Update particles
+        new_particles = []
+        for pid, vx, vy, life in self.go_anim_particles:
+            life -= 1
+            # Move
+            self.canvas.move(pid, vx, vy)
+            # Apply slight drag + outward drift aging effect
+            vx *= 0.96
+            vy *= 0.96 + 0.003
+            # Fade color based on remaining life
+            t = max(0.0, min(1.0, life/70))
+            # Fade from pink -> violet -> dark
+            fr = int(255 * t)
+            fg = int(55 + (20-55)*(1-t))  # narrow shift
+            fb = int(255 * t)
+            try:
+                self.canvas.itemconfig(pid, fill=f"#{fr:02x}{fg:02x}{fb:02x}")
+            except Exception:
+                pass
+            if life > 0:
+                new_particles.append((pid, vx, vy, life))
+            else:
+                self.canvas.delete(pid)
+        self.go_anim_particles = new_particles
+        # Stop after particles gone and some frames passed
+        if self.go_anim_frame > 220 and not self.go_anim_particles:
+            self.go_anim_active = False
+            return
+        # Schedule next frame (decoupled from main game loop which is halted)
+        try:
+            self.root.after(50, self.update_game_over_animation)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     root = tk.Tk()
