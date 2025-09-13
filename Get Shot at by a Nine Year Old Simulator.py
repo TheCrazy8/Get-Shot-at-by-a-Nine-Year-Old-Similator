@@ -5,6 +5,12 @@ import pygame
 import sys
 import os
 import math
+try:
+    # Optional Steam Input (Steamworks) support
+    from steamworks import STEAMWORKS
+    _STEAMWORKS_AVAILABLE = True
+except Exception:
+    _STEAMWORKS_AVAILABLE = False
 
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
@@ -110,6 +116,12 @@ class bullet_hell_game:
         # Joystick handle (Steam Input / Switch Pro)
         self.joystick = None
         self.init_gamepad()
+        # Steam Input attributes
+        self.steam = None
+        self.steam_controllers = []
+        self.steam_action_move = None
+        self.use_steam_input = False
+        self.init_steam_input()
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = {
@@ -137,6 +149,57 @@ class bullet_hell_game:
         self.update_game()
 
     # -------------- Gamepad / Steam Input Support --------------
+    def init_steam_input(self):
+        """Initialize Steam Input if steamworks is available and Steam is running.
+        Expects an action manifest alongside the executable if custom actions desired.
+        We just fetch the first connected controller and a generic move action if present."""
+        if not _STEAMWORKS_AVAILABLE:
+            return
+        try:
+            self.steam = STEAMWORKS()
+            self.steam.initialize()
+            # Load action manifest if you have one (placeholder path):
+            # self.steam.Input.Init() is implicit; steamworksPy auto-inits input
+            self.steam.Input.Init()
+            self.steam_controllers = self.steam.Input.GetConnectedControllers()
+            if self.steam_controllers:
+                # Attempt to get a Move analog action handle (replace with your actual action name)
+                try:
+                    self.steam_action_move = self.steam.Input.GetAnalogActionHandle("Move")
+                except Exception:
+                    self.steam_action_move = None
+                self.use_steam_input = True
+                print(f"[SteamInput] Controllers: {self.steam_controllers}")
+            else:
+                print("[SteamInput] No controllers via Steam Input.")
+        except Exception as e:
+            print("[SteamInput] Init failed:", e)
+            self.use_steam_input = False
+
+    def poll_steam_input(self):
+        if not self.use_steam_input or not self.steam_controllers or self.paused or self.game_over:
+            return False
+        moved = False
+        try:
+            self.steam.Input.RunFrame()
+            ctrl = self.steam_controllers[0]
+            if self.steam_action_move:
+                analog = self.steam.Input.GetAnalogActionData(ctrl, self.steam_action_move)
+                if analog and analog.get('bActive'):
+                    x = analog.get('x', 0.0)
+                    y = analog.get('y', 0.0)
+                    deadzone = 0.25
+                    if abs(x) > deadzone or abs(y) > deadzone:
+                        mag = (x*x + y*y)**0.5
+                        if mag > 1e-3:
+                            x /= mag
+                            y /= mag
+                        self.apply_player_move(x * self.player_speed, -y * self.player_speed)  # Steam Y up -> invert
+                        moved = True
+        except Exception as e:
+            print("[SteamInput] Poll error:", e)
+            return False
+        return moved
     def init_gamepad(self):
         """Initialize joystick via pygame. Steam Input maps Switch Pro to XInput; ensure Steam Input is enabled for the game (add as non-Steam game)."""
         try:
@@ -762,8 +825,10 @@ class bullet_hell_game:
             return
         if self.paused:
             return
-    # Gamepad polling
-        self.poll_gamepad()
+        # Steam Input preferred, fallback to pygame joystick
+        used_steam = self.poll_steam_input()
+        if not used_steam:
+            self.poll_gamepad()
         # Background animation
         self.update_background()
         self.canvas.lift(self.dialog)
