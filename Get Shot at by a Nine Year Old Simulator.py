@@ -163,6 +163,30 @@ class bullet_hell_game:
             self.update_lore_line(force=True)
         except Exception:
             pass
+        # Game over flavor text list & selection holder
+        self.game_over_messages = [
+            "YOUR existence was repurposed.",
+            "YOU are no longer YOU...",
+            "ERROR 404: FILE \"YOU.EXE\" NOT FOUND",
+            "An eternal silence washes over all",
+            "YOU hope that maybe J made it out...  On second thought, maybe YOU don't...",
+            "There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n  There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape.",
+            "\"Thanks! :3\"",
+            "YOU think to YOURself \"so this is what the recycle bin is like...\"",
+            "YOU'll never find out whether this was digital, dream, delusion, or definite",
+            "Maybe...",
+            "Game over.txt does not exist.  Pllease specify another file.",
+            "YOUR reflection melts.  YOU melts.  YOU melt.",
+            "YOU can't feel YOUR YOkjdfU",
+            "YOU try to scream but nothing comes out.  YOU have no mouth.",
+            "At least it's over.",
+            "Was it really worth it?",
+            "ERKJHWRKJTHSLKREJGHSLFKJGHDSLFJGHSDLKFJljkdsdgfkjhdfgkjlnbxljbhslairubhALIUtaeglurelaguhgulHALFUHB",
+            "FILE J.EXE STATUS: UPLOADhED TO EXISTANCE",
+            "YOUR soul was useful for something in the end...",
+            "Useless files have been purged"
+        ]
+        self.selected_game_over_message = None
         self.update_game()
 
     # -------------- Gamepad / Steam Input Support --------------
@@ -601,6 +625,8 @@ class bullet_hell_game:
             'boomerang': 225,
             'split': 240
         }
+    # Reset any previously selected game over message
+        self.selected_game_over_message = None
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -931,6 +957,14 @@ class bullet_hell_game:
             return
         self.lives -= 1
         if self.lives <= 0:
+            # Pick a random game over message once
+            try:
+                if self.game_over_messages:
+                    self.selected_game_over_message = random.choice(self.game_over_messages)
+                else:
+                    self.selected_game_over_message = None
+            except Exception:
+                self.selected_game_over_message = None
             self.game_over = True
             # Start game over animation if available
             try:
@@ -2247,11 +2281,22 @@ class bullet_hell_game:
         self.go_glitch_rects = []
         self.go_black_cover = None
         self.go_black_alpha = 0.0
+        self.go_anim_subtext = None
         # Large pulsing overlay text (separate from static text already created)
         try:
             self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2-140, text="GAME OVER", fill="#ffffff", font=("Arial", 64, "bold"))
         except Exception:
             self.go_anim_text = None
+        # Secondary message below if one was selected
+        if self.selected_game_over_message:
+            try:
+                self.go_anim_subtext = self.canvas.create_text(
+                    self.width//2, self.height//2 - 60,
+                    text=self.selected_game_over_message,
+                    fill="#ff66aa", font=("Courier New", 26), justify='center'
+                )
+            except Exception:
+                self.go_anim_subtext = None
         # Spawn radial particles from center
         cx = self.width//2
         cy = self.height//2
@@ -2342,6 +2387,9 @@ class bullet_hell_game:
                     if self.go_anim_text is not None:
                         self.canvas.delete(self.go_anim_text)
                         self.go_anim_text = None
+                    if self.go_anim_subtext is not None:
+                        self.canvas.delete(self.go_anim_subtext)
+                        self.go_anim_subtext = None
                 except Exception: pass
                 self.go_glitch_phase = 2
         # --- Phase 2: Hold black, minimal updates ---
