@@ -727,10 +727,21 @@ class bullet_hell_game:
 
     def shoot_star_bullet(self):
         if not self.game_over:
-            x = random.randint(20, self.width-40)
-            # Draw a star using create_polygon
-            points = [x, 0, x+10, 30, x+20, 0, x+5, 20, x+15, 20]
-            bullet = self.canvas.create_polygon(points, fill="magenta")
+            # Proper 5-point star with outline. Keep hit area similar size.
+            outer_r = 18
+            inner_r = outer_r * 0.45
+            # Ensure it fits horizontally
+            cx = random.randint(outer_r+2, self.width - outer_r - 2)
+            cy = outer_r  # start near top
+            pts = []
+            # Star points (10 vertices alternating outer/inner)
+            for i in range(10):
+                angle = -math.pi/2 + i * math.pi/5  # start pointing up
+                r = outer_r if i % 2 == 0 else inner_r
+                px = cx + r * math.cos(angle)
+                py = cy + r * math.sin(angle)
+                pts.extend([px, py])
+            bullet = self.canvas.create_polygon(pts, fill="magenta", outline="white", width=2)
             self.star_bullets.append(bullet)
 
     def shoot_rect_bullet(self):
@@ -1370,9 +1381,30 @@ class bullet_hell_game:
                 self.grazed_bullets.add(fast_bullet)
                 self.show_graze_effect()
 
-        # Move star bullets
+        # Move & spin star bullets
         for star_bullet in self.star_bullets[:]:
+            # Fall movement
             self.canvas.move(star_bullet, 0, star_speed)
+            # Spin: fetch current coords, rotate around center by small angle
+            coords = self.canvas.coords(star_bullet)
+            if len(coords) >= 6:  # polygon
+                # Compute center
+                xs = coords[0::2]
+                ys = coords[1::2]
+                cx = sum(xs)/len(xs)
+                cy = sum(ys)/len(ys)
+                angle = 0.18  # radians per frame
+                sin_a = math.sin(angle)
+                cos_a = math.cos(angle)
+                new_pts = []
+                for x, y in zip(xs, ys):
+                    dx = x - cx
+                    dy = y - cy
+                    rx = dx * cos_a - dy * sin_a + cx
+                    ry = dx * sin_a + dy * cos_a + cy
+                    new_pts.extend([rx, ry])
+                self.canvas.coords(star_bullet, *new_pts)
+            # Collision / bounds / graze
             if self.check_collision(star_bullet):
                 if not self.practice_mode:
                     self.lives -= 1
@@ -1380,11 +1412,15 @@ class bullet_hell_game:
                         self.end_game()
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
-            elif self.canvas.coords(star_bullet)[1] > self.height:
+                continue
+            # Off screen
+            bbox = self.canvas.bbox(star_bullet)
+            if bbox and bbox[1] > self.height:
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
                 self.score += 3
-            # Grazing check
+                continue
+            # Grazing
             if self.check_graze(star_bullet) and star_bullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(star_bullet)
