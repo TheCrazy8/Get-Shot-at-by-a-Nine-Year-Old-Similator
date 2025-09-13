@@ -978,6 +978,29 @@ class bullet_hell_game:
             except Exception:
                 pass
 
+    def end_game(self):
+        """Compatibility method for legacy calls in bullet logic.
+        Ensures game over animation triggers even if older code calls end_game()."""
+        if self.game_over:
+            return
+        # Select message if not already chosen
+        try:
+            if getattr(self, 'selected_game_over_message', None) is None and getattr(self, 'game_over_messages', None):
+                if self.game_over_messages:
+                    self.selected_game_over_message = random.choice(self.game_over_messages)
+        except Exception:
+            pass
+        self.game_over = True
+        try:
+            self.start_game_over_animation()
+        except Exception:
+            # Fallback minimal display
+            try:
+                msg = getattr(self, 'selected_game_over_message', 'GAME OVER') or 'GAME OVER'
+                self.canvas.create_text(self.width//2, self.height//2, text=msg, fill='white', font=('Arial', 48, 'bold'))
+            except Exception:
+                pass
+
     def update_game(self):
         if self.game_over:
             return
