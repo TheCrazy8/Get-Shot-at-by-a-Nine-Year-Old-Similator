@@ -804,6 +804,7 @@ class bullet_hell_game:
         if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
             self.shoot_split_bullet()
         # Move triangle bullets
+        triangle_speed = 7
 
         for bullet_tuple in self.triangle_bullets[:]:
             bullet, direction = bullet_tuple
@@ -940,7 +941,6 @@ class bullet_hell_game:
         # Bullet speeds scale with difficulty
         bullet_speed = 7
         bullet2_speed = 7
-        triangle_speed = 7
         diag_speed = 5
         boss_speed = 10
         zigzag_speed = 5
