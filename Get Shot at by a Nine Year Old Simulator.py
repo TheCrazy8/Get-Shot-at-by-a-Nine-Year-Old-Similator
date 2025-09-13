@@ -1464,6 +1464,7 @@ class bullet_hell_game:
             bcy = (by1 + by2)/2
             dx = pcx - bcx
             dy = pcy - bcy
+           
             dist = math.hypot(dx, dy) or 1
             # Normalize and apply steering (lerp velocities)
             target_vx = dx / dist * homing_speed
@@ -1691,110 +1692,133 @@ class bullet_hell_game:
                 "The Rift stacks moments like cassette tracks.",
                 "VHS sunsets loop over statues of obsolete gods.",
                 "Time here is a collage, not a line.",
-                "You feel layers of futures that never resolved."
+                "YOU feel layers of futures that never resolved.",
+                "Some seconds arrive already fossilized.",
+                "Yesterday keeps rebooting under a violet sky.",
+                "Futures spool in reverse until they fray.",
+                "Gravity is just nostalgia remembering downward.",
+                "Loose hours drip from torn chronology seams.",
+                "YOU step through a corridor made of almosts."
             ],
             'j': [
                 "J hums a song that never charted in a world that never was.",
                 "A file error kept a child from deletion.",
                 "J repeats a sentence— each loop slightly skewed.",
-                "'If I win, I get to grow up,' J insists."
+                "'If I win, I get to grow up,' J insists.",
+                "Their laugh has checksum noise at the edges.",
+                "J edits their own memories like a save file.",
+                "Every defeat YOU take is J's pretend birthday candle.",
+                "They practice aging by tracing taller shadows.",
+                "J asks what year it is, then asks what a year is.",
+                "Somebody tried to archive J. The archive blinked first."
             ],
             'overwriting': [
                 "Bullets rewrite, they don't bruise.",
-                "Fragments of dead summers ricochet around you.",
+                "Fragments of dead summers ricochet around YOU.",
                 "Avoid becoming an echo process.",
-                "Your outline fuzzes when a fragment grazes you."
+                "Your outline fuzzes when a fragment grazes YOU.",
+                "Impact = apply patch: self.you -> static.null",
+                "Too many hits and YOUR timeline pointer deallocates.",
+                "Glitches smear over YOUR position like wet ink.",
+                "Some shots carry metadata: AUTHOR=UNKNOWN_BABBLE.",
+                "Erasure leaves a cool empty rectangle in the air.",
+                "Recovered sectors keep pronouncing YOUR name wrong."
             ],
             'ominous': [
-                "Something audits both you and J.",
+                "Something audits both YOU and J.",
                 "A deeper warden tracks corruption indices.",
                 "Graffiti: THE CHILD IS OLDER THAN THE GRID.",
-                "Static silhouettes flicker at the periphery."
-            ]
-        }
-        self.lore_cycle_index = 0
-        # Ephemeral mid-screen lore overlay items (each: {'ids': [...], 'life': frames})
-        self._mid_lore_items = []
-
-    def maybe_show_mid_lore(self):
-        """Randomly spawn a transient red lore fragment with white outline near center."""
-        try:
-            if random.randint(1,180) != 1:
-                return
-            if not getattr(self, 'lore_fragments', None):
-                return
-            cat = random.choice(list(self.lore_fragments.keys()))
-            bucket = self.lore_fragments.get(cat, [])
-            if not bucket:
-                return
-            frag = random.choice(bucket)
-            x = self.width//2 + random.randint(-self.width//6, self.width//6)
-            y = self.height//2 + random.randint(-100, 100)
-            outlines = []
-            for ox, oy in [(-2,0),(2,0),(0,-2),(0,2)]:
-                oid = self.canvas.create_text(x+ox, y+oy, text=frag, fill="white", font=("Arial",18,"bold"), justify="center")
-                outlines.append(oid)
-            main_id = self.canvas.create_text(x, y, text=frag, fill="#ff2222", font=("Arial",18,"bold"), justify="center")
-            for oid in outlines:
-                try:
-                    self.canvas.tag_lower(oid, main_id)
-                except Exception:
-                    pass
-            self._mid_lore_items.append({'ids':[main_id]+outlines, 'life':60})
-        except Exception:
-            pass
-    # Do NOT schedule update loop here (main loop already schedules). Intentionally left empty.
-
-    def check_collision(self, bullet):
-        bullet_coords = self.canvas.coords(bullet)
-        player_coords = self.canvas.coords(self.player)
-        return (bullet_coords[2] > player_coords[0] and
-                bullet_coords[0] < player_coords[2] and
-                bullet_coords[3] > player_coords[1] and
-                bullet_coords[1] < player_coords[3])
-
-    def end_game(self):
-        self.game_over = True
-        time_survived = int(time.time() - self.timee - self.paused_time_total)
-        self.canvas.create_text(self.width//2, self.height//2-50, text="Game Over", fill="white", font=("Arial", 30))
-        self.canvas.create_text(self.width//2, self.height//2, text=f"Score: {self.score}", fill="white", font=("Arial", 20))
-        self.canvas.create_text(self.width//2, self.height//2+50, text=f"Time Survived: {time_survived} seconds", fill="white", font=("Arial", 20))
-        self.canvas.create_text(self.width//2, self.height//2+100, text="Press R to Restart", fill="yellow", font=("Arial", 18))
-        self.root.bind("r", self.restart_game)
-        # Start game over animation loop (non-intrusive)
-        try:
-            self.start_game_over_animation()
-        except Exception:
-            pass
-
-    # --- Lore data (non-intrusive) ---
-    def init_lore(self):
-        # Categorized fragments derived from top-of-file lore comment.
-        # No gameplay impact; can be surfaced in dialog.
-        self.lore_fragments = {
-            'rift': [
-                "The Rift stacks moments like cassette tracks.",
-                "VHS sunsets loop over statues of obsolete gods.",
-                "Time here is a collage, not a line.",
-                "You feel layers of futures that never resolved."
+                "Static silhouettes flicker at the periphery.",
+                "YOU feel watched by a process that hasn't spawned yet.",
+                "Invisible cursors highlight YOU in cyclic passes.",
+                "Heartbeat desync flagged: pending review.",
+                "An observer thread sleeps until YOU 'matter'.",
+                "A cold compile error paces behind the scenery.",
+                "Silence here is just buffered thunder."
             ],
-            'j': [
-                "J hums a song that never charted in a world that never was.",
-                "A file error kept a child from deletion.",
-                "J repeats a sentence— each loop slightly skewed.",
-                "'If I win, I get to grow up,' J insists."
+            'glitch': [
+                "Pixels stall mid-fall then apologize.",
+                "Your afterimage overtakes YOU and sulks.",
+                "Color bands briefly sort themselves alphabetically.",
+                "The UI blinks in a dialect YOU don't render.",
+                "J's shadow reboots twice per second.",
+                "A bullet forgets its vector and improvises.",
+                "Memory leak drips neon droplets upward.",
+                "Audio pans left to escape continuity.",
+                "Hitboxes negotiate new treaties mid-frame.",
+                "Pause refused: exception: TIMEHANDLE_ALREADY_OPEN"
             ],
-            'overwriting': [
-                "Bullets rewrite, they don't bruise.",
-                "Fragments of dead summers ricochet around you.",
-                "Avoid becoming an echo process.",
-                "Your outline fuzzes when a fragment grazes you."
+            'memory': [
+                "Shopping mall skylights reflecting a sun that retired.",
+                "Birthday cake slices aging in suspended frosting.",
+                "Rollercoaster cars parked on a track of abandoned ifs.",
+                "Chalk drawings immune to rain but not revision.",
+                "Playground sand storing cached laughter packets.",
+                "A trophy for 'Most Nearly Real'.",
+                "Smell of ozone + crayons + cosmic dust.",
+                "Library checkout card with dates from missing decades.",
+                "A sticker sheet where the last sticker refuses destiny.",
+                "YOU recall things YOU never survived."
             ],
-            'ominous': [
-                "Something audits both you and J.",
-                "A deeper warden tracks corruption indices.",
-                "Graffiti: THE CHILD IS OLDER THAN THE GRID.",
-                "Static silhouettes flicker at the periphery."
+            'grid': [
+                "The floor lines inhale, exhale, mimic tides.",
+                "Perspective rails carry rumor packets forward.",
+                "Horizons compile with one warning suppressed.",
+                "Wireframe polygons petition for texture rights.",
+                "A vanishing point tries to un-exist politely.",
+                "Your shadow is a coordinate debug print.",
+                "Depth quantizes at inconvenient altitudes.",
+                "Reflections swap owners when YOU blink.",
+                "Parallax argues with parable.",
+                "Celestial grids sync to a childhood metronome."
+            ],
+            'audit': [
+                "LOG: Player anomaly persists beyond tolerance window.",
+                "TRACE: J integrity checksum drifting (acceptable?).",
+                "NOTICE: Unauthorized persistence request queued.",
+                "WARN: Chronology index fragmentation rising.",
+                "SCAN: Foreign agency fingerprint: UNRESOLVED.",
+                "QUERY: Why does a game need a warden?",
+                "METRIC: Hope variance stable at low amplitude.",
+                "ALERT: Observation buffer overflow (muted).",
+                "TASK: Reclassify opponent -> Co-Subject? (denied)",
+                "FOOTNOTE: This log will self-corrupt for tone."
+            ],
+            'meta': [
+                "YOU feel the player considering other tabs.",
+                "Fourth wall requires urgent structural patching.",
+                "A tooltip from another genre wanders in lost.",
+                "The pause screen drafts a manifesto.",
+                "Credits pre-emptively thank abandoned futures.",
+                "Settings slider labeled 'Mercy' is greyed out.",
+                "Speedrunners already routing this moment.",
+                "Achievement Unlocked: Observed Observing Observation.",
+                "Dialogue buffer shrugs— improv mode engaged.",
+                "Someone is screenshotting YOUR hesitation."
+            ],
+            'echo': [
+                "YOUR footsteps play at quarter volume one frame later.",
+                "Names YOU never used queue for processing.",
+                "A distant YOU succeeds and the sound drifts back.",
+                "Laughter cached in mono, replayed in grayscale.",
+                "Pronouns desaturate under archival lighting.",
+                "Victory fanfare tests its reverb then idles.",
+                "Silhouettes rehearse exits YOU haven't earned.",
+                "Old save files argue about canonical tone.",
+                "A whisper arrives with TODO tags.",
+                "Ambient hope loops seamlessly (YOU checked)."
+            ],
+            'process': [
+                "Thread 'fear' yielded to thread 'pattern'.",
+                "Garbage collector spares a childhood artifact.",
+                "Delta-time negotiates with retro aesthetics.",
+                "Stack trace references an emotion handle.",
+                "Scheduler prioritizes awe behind survival.",
+                "A coroutine hums lullabies in machine code.",
+                "Frame pacing consults with destiny manager.",
+                "Event loop rejects exit signal (resource busy).",
+                "Profiler marks a spike labeled 'wonder'.",
+                "Finalizer prepared but object refuses scope end."
             ]
         }
         self.lore_cycle_index = 0
