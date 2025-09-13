@@ -389,27 +389,30 @@ class bullet_hell_game:
     # ---------------- Vaporwave background setup ----------------
     def init_background(self):
         # Parameters
-        self.bg_color_cycle = ["#0d0221", "#1a0533", "#32054e", "#4b0a67", "#6d117b", "#8f1f85",        "#b1387f", "#d25872"]
+        self.bg_color_cycle = ["#05030a", "#0a0b19", "#120d26", "#1d1235", "#271642", "#321a50",    "#3e1e5f", "#4b246f"]
         self.bg_cycle_index = 0
         self.bg_last_color_change = time.time()
-        # Tunnel / sphere grid parameters
-        self.tunnel_rings = []      # (id, z, phase)
-        self.tunnel_spokes = []     # line ids
-        self.tunnel_depth = 28
-        self.tunnel_speed = 0.28
-        self.tunnel_curvature_phase = 0.0
-        self.tunnel_center_offset = (0,0)
-        self._create_tunnel_geometry()
+        # Grid params
+        self.grid_h_lines = []
+        self.grid_v_lines = []
+        self.grid_depth = 38
+        self.grid_scroll_speed = 0.55
+        self.grid_vertical_count = 18
+        self.grid_perspective_power = 1.55
+        self.grid_base_y = self.height - 12
+        self.grid_horizon_y = int(self.height * 0.18)
+        self.grid_glow_cycle = 0.0
+        self._create_grid_lines()
         # Atmospheric elements
-        self.memory_objs = []       # floating memory fragments
+        self.memory_objs = []
         self.last_memory_spawn = 0
-        self.memory_spawn_interval = 2.7
-        self.eye_objs = []          # watcher eyes
+        self.memory_spawn_interval = 3.4
+        self.eye_objs = []
         self.last_eye_spawn = 0
-        self.eye_spawn_interval = 7.5
-        self.sys_msgs = []          # system boot/crash lines
+        self.eye_spawn_interval = 8.5
+        self.sys_msgs = []
         self.last_sys_spawn = 0
-        self.sys_spawn_interval = 5.5
+        self.sys_spawn_interval = 6.5
         self.bg_glitch_phase = 0.0
 
     def toggle_practice_mode(self, event=None):
@@ -431,7 +434,26 @@ class bullet_hell_game:
             self.restart_game(force=True)
 
     def _create_grid_lines(self):
-        pass  # legacy grid disabled (using tunnel now)
+        # Clear existing
+        for lid, _ in getattr(self, 'grid_h_lines', []):
+            try: self.canvas.delete(lid)
+            except Exception: pass
+        for lid, _ in getattr(self, 'grid_v_lines', []):
+            try: self.canvas.delete(lid)
+            except Exception: pass
+        self.grid_h_lines.clear(); self.grid_v_lines.clear()
+        # Horizontal rows
+        for i in range(self.grid_depth):
+            t = i / (self.grid_depth - 1)
+            y = self.grid_horizon_y + (self.grid_base_y - self.grid_horizon_y) * (t ** self.grid_perspective_power)
+            line = self.canvas.create_line(0, y, self.width, y, fill="#1d1530", width=1)
+            self.grid_h_lines.append((line, t))
+        # Vertical converging lines
+        for j in range(self.grid_vertical_count):
+            x_norm = j / (self.grid_vertical_count - 1)
+            x_screen = int(x_norm * self.width)
+            line = self.canvas.create_line(x_screen, self.grid_base_y, self.width/2, self.grid_horizon_y, fill="#1d1530", width=1)
+            self.grid_v_lines.append((line, x_norm))
 
     def update_background(self):
         now = time.time()
