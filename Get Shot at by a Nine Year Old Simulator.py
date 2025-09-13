@@ -717,22 +717,6 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.dialog, font=("Wingdings",20 ))
         else:
             self.canvas.itemconfig(self.dialog, font=("Arial",20 ))
-        # Append occasional lore fragment (low probability) without altering primary selection
-        try:
-            if hasattr(self, 'lore_fragments'):
-                # 1 in 6 chance to append one fragment cycling categories
-                if random.randint(1,6) == 1:
-                    categories = list(self.lore_fragments.keys())
-                    if categories:
-                        cat = categories[self.lore_cycle_index % len(categories)]
-                        bucket = self.lore_fragments.get(cat, [])
-                        if bucket:
-                            frag = random.choice(bucket)
-                            # Avoid overlong string: newline separated
-                            self.dial = f"{self.dial}\n¬ {frag}"
-                            self.lore_cycle_index += 1
-        except Exception:
-            pass
         return self.dial
 
     def shoot_horizontal_laser(self):
