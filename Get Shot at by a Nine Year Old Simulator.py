@@ -97,7 +97,6 @@ class bullet_hell_game:
         self.root.bind("<Escape>", self.toggle_pause)
         self.root.bind("r", self.restart_game)
         self.root.bind("p", self.toggle_practice_mode)
-    # Cycle through connected controllers (if multiple) with 'j'
         self.grazing_radius = 40
         self.grazed_bullets = set()
         self.graze_effect_id = None
@@ -111,8 +110,6 @@ class bullet_hell_game:
         # Joystick handle (Steam Input / Switch Pro)
         self.joystick = None
         self.init_gamepad()
-    # Debug: set to True to print controller axes each frame movement input is detected
-        self.controller_debug = False
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = {
@@ -141,124 +138,54 @@ class bullet_hell_game:
 
     # -------------- Gamepad / Steam Input Support --------------
     def init_gamepad(self):
-        """Enumerate and pick the 'best' available gamepad automatically.
-        Preference order: Switch Pro > Xbox/XInput > PlayStation > other generic."""
+        """Initialize joystick via pygame. Steam Input maps Switch Pro to XInput; ensure Steam Input is enabled for the game (add as non-Steam game)."""
         try:
             pygame.joystick.init()
-            count = pygame.joystick.get_count()
-            self.joystick_count = count
-            self._last_gamepad_scan = time.time()
-            if count == 0:
-                if self.controller_debug:
-                    print("[JOY] No controllers present.")
-                self.joystick = None
-                self.joystick_index = None
-                self.joystick_type = None
-                return
-            best_idx = 0
-            best_score = -1
-            names = []
-            for i in range(count):
-                js = pygame.joystick.Joystick(i)
-                js.init()
-                nm = js.get_name()
-                names.append(nm)
-                low = nm.lower()
-                score = 0
-                if ('pro' in low and 'controller' in low) or 'switch' in low:
-                    score = 5
-                elif 'xbox' in low or 'xinput' in low or 'microsoft' in low:
-                    score = 4
-                elif 'dualshock' in low or 'dualsense' in low or 'playstation' in low or 'wireless controller' in low:
-                    score = 4
-                elif 'controller' in low or 'gamepad' in low:
-                    score = 2
-                if score > best_score:
-                    best_score = score
-                    best_idx = i
-            self.joystick_index = best_idx
-            self.joystick = pygame.joystick.Joystick(best_idx)
-            self.joystick.init()
-            nm = self.joystick.get_name()
-            low = nm.lower()
-            if ('pro' in low and 'controller' in low) or 'switch' in low:
-                self.joystick_type = 'switch_pro'
-            elif 'xbox' in low or 'xinput' in low or 'microsoft' in low:
-                self.joystick_type = 'xbox'
-            elif 'dualshock' in low or 'dualsense' in low or 'playstation' in low or 'wireless controller' in low:
-                self.joystick_type = 'playstation'
+            if pygame.joystick.get_count() > 0:
+                self.joystick = pygame.joystick.Joystick(0)
+                self.joystick.init()
+                print(f"Gamepad detected: {self.joystick.get_name()}")
             else:
-                self.joystick_type = 'generic'
-            print(f"[JOY] Active: idx={self.joystick_index} name='{nm}' type={self.joystick_type}")
-            if self.controller_debug:
-                print("[JOY] All devices:")
-                for i, nm in enumerate(names):
-                    mark = '*' if i == self.joystick_index else ' '
-                    print(f"  {mark} [{i}] {nm}")
+                print("No gamepad detected.")
         except Exception as e:
-            print("[JOY] Init failed:", e)
-            self.joystick = None
-            self.joystick_index = None
-            self.joystick_type = None
-
-    def cycle_joystick(self, event=None):
-        """Bind to a key to cycle through available joysticks at runtime."""
-        try:
-            count = pygame.joystick.get_count()
-            if count <= 1:
-                return
-            if self.joystick_index is None:
-                self.init_gamepad()
-                return
-            next_index = (self.joystick_index + 1) % count
-            self.joystick = pygame.joystick.Joystick(next_index)
-            self.joystick.init()
-            self.joystick_index = next_index
-            print(f"Switched to gamepad {self.joystick_index}: {self.joystick.get_name()}")
-        except Exception as e:
-            print("Cycle joystick failed:", e)
+            print("Joystick init failed:", e)
 
     def poll_gamepad(self):
         if not self.joystick or self.paused or self.game_over:
             return
-        # Pump events to refresh joystick state
         try:
             pygame.event.pump()
         except Exception:
             return
-        deadzone = 0.22
-        dx = 0.0
-        dy = 0.0
+        deadzone = 0.25
+        dx = 0
+        dy = 0
+        # Axes 0 (left/right), 1 (up/down) on most controllers
         try:
-            ax0 = self.joystick.get_axis(0)  # left stick X
-            ax1 = self.joystick.get_axis(1)  # left stick Y
+            ax0 = self.joystick.get_axis(0)
+            ax1 = self.joystick.get_axis(1)
             if abs(ax0) > deadzone:
                 dx = ax0
             if abs(ax1) > deadzone:
                 dy = ax1
         except Exception:
             pass
-        # Hat (D-Pad) fallback
+        # Hat fallback
         if dx == 0 and dy == 0:
             try:
-                hats = self.joystick.get_numhats()
-                if hats > 0:
+                if self.joystick.get_numhats() > 0:
                     hx, hy = self.joystick.get_hat(0)
                     dx = hx
-                    dy = -hy  # Invert hat Y to match typical up-negative scheme
+                    dy = hy
             except Exception:
                 pass
-        # Invert Y if you want up to be negative canvas delta (Tk uses +y downward)
-        # We'll keep dy as-is because apply_player_move expects negative for up.
-        if dx != 0 or dy != 0:
-            mag = (dx * dx + dy * dy) ** 0.5
-            if mag > 1.0:
+        if dx or dy:
+            # Normalize diagonal
+            mag = (dx*dx + dy*dy) ** 0.5
+            if mag > 1e-3:
                 dx /= mag
                 dy /= mag
-            # Apply speed
             self.apply_player_move(dx * self.player_speed, dy * self.player_speed)
-            if self.controller_debug:
-                print(f"[JOY] idx={self.joystick_index} name={self.joystick.get_name()} axes=({dx:.2f},{dy:.2f})")
 
     def apply_player_move(self, dx, dy):
         if self.paused or self.game_over:
@@ -328,61 +255,45 @@ class bullet_hell_game:
             self.grid_v_lines.append((line, x_norm))
 
     def update_background(self):
-        # Hot-plug / initial detection every 1s if needed
         now = time.time()
-        if (not self.joystick) and (now - self._last_gamepad_scan > 1):
-            self.init_gamepad()
-        else:
-            try:
-                if pygame.joystick.get_count() != self.joystick_count and (now - self._last_gamepad_scan > 0.5):
-                    if self.controller_debug:
-                        print("[JOY] Device count changed -> rescanning")
-                    self.init_gamepad()
-            except Exception:
-                pass
-        if not self.joystick or self.paused or self.game_over:
-            return
-        try:
-            pygame.event.pump()
-        except Exception:
-            return
-        deadzone = 0.22
-        dx = 0.0
-        dy = 0.0
-        try:
-            ax0 = self.joystick.get_axis(0)
-            ax1 = self.joystick.get_axis(1)
-            if abs(ax0) > deadzone:
-                dx = ax0
-            if abs(ax1) > deadzone:
-                dy = ax1
-        except Exception:
-            pass
-        if dx == 0 and dy == 0:
-            try:
-                if self.joystick.get_numhats() > 0:
-                    hx, hy = self.joystick.get_hat(0)
-                    dx = hx
-                    dy = -hy
-            except Exception:
-                pass
-        if dx != 0 or dy != 0:
-            mag = (dx*dx + dy*dy)**0.5
-            if mag > 1.0:
-                dx /= mag
-                dy /= mag
-            self.apply_player_move(dx * self.player_speed, dy * self.player_speed)
-            if self.controller_debug:
-                try:
-                    print(f"[JOY MOVE] idx={self.joystick_index} type={self.joystick_type} dx={dx:.2f} dy={dy:.2f}")
-                except Exception:
-                    pass
-        # Ensure simple defaults for background gradient if earlier logic not run
+        # Color cycle
+        if now - self.bg_last_color_change > self.bg_color_interval:
+            self.bg_cycle_index = (self.bg_cycle_index + 1) % len(self.bg_color_cycle)
+            self.bg_last_color_change = now
+        # Interpolate background color to next
+        next_index = (self.bg_cycle_index + 1) % len(self.bg_color_cycle)
+        phase = (now - self.bg_last_color_change) / self.bg_color_interval
+        phase = max(0.0, min(1.0, phase))
+        c1 = self.bg_color_cycle[self.bg_cycle_index]
+        c2 = self.bg_color_cycle[next_index]
+        def _interp_color(a, b, t):
+            av = int(a[1:3],16), int(a[3:5],16), int(a[5:7],16)
+            bv = int(b[1:3],16), int(b[3:5],16), int(b[5:7],16)
+            cv = tuple(int(av[i] + (bv[i]-av[i])*t) for i in range(3))
+            return f"#{cv[0]:02x}{cv[1]:02x}{cv[2]:02x}"
+        bg_col = _interp_color(c1, c2, phase)
+        self.canvas.configure(bg=bg_col)
+        # Compute contrasting base colors for grid lines based on background luminance.
+        br = int(bg_col[1:3],16)
+        bg_g = int(bg_col[3:5],16)
+        bb = int(bg_col[5:7],16)
+        # Relative luminance (simple perceptual approximation)
+        lum = 0.299*br + 0.587*bg_g + 0.114*bb
+        # Choose two endpoint colors for gradients: one bright, one dark, ensuring contrast.
+        if lum < 90:  # background very dark -> use bright neon set
+            grad_a = (255, 230, 140)  # warm bright
+            grad_b = (140, 255, 255)  # cool bright
+        elif lum < 160:  # medium dark -> mid-high contrast
+            grad_a = (255, 170, 255)
+            grad_b = (120, 220, 255)
+        else:  # light background (rare with palette) -> darker saturated lines
+            grad_a = (180, 40, 200)
+            grad_b = (40, 160, 255)
         def _mix(a, b, t):
             return tuple(int(a[i] + (b[i]-a[i])*t) for i in range(3))
-        grad_a = (180, 180, 180)
-        grad_b = (255, 255, 255)
-        glow = 1.0
+        # Glow/pulse factor for line brightness
+        self.grid_glow_cycle += 0.05
+        glow = (math.sin(self.grid_glow_cycle) + 1)/2  # 0..1
         # Update horizontal lines to scroll downward; wrap to top with new perspective
         new_h_lines = []
         for line_id, t in self.grid_h_lines:
