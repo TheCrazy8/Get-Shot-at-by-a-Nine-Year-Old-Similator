@@ -52,6 +52,10 @@ class bullet_hell_game:
         self.homing_bullets = []      # [(bullet_id, vx, vy)] homing towards player
         self.spiral_bullets = []      # [(bullet_id, angle, radius, ang_speed, rad_speed,   cx, cy)]
         self.radial_bullets = []      # [(bullet_id, vx, vy)] spawned in bursts
+        # Additional new bullet type containers
+        self.wave_bullets = []        # [(bullet_id, base_x, phase, amp, vy, phase_speed)]
+        self.boomerang_bullets = []   # [(bullet_id, vy, timer, state)] state: 'down'->'up'
+        self.split_bullets = []       # [(bullet_id, timer)] splits into fragments after timer
         self.score = 0
         self.timee = int(time.time())
         self.dial = "Welcome to Get Shot at by a Nine Year Old Simulator!"
@@ -76,7 +80,10 @@ class bullet_hell_game:
             'laser': 'Laser',
             'homing': 'Homing',
             'spiral': 'Spiral',
-            'radial': 'Radial Burst'
+            'radial': 'Radial Burst',
+            'wave': 'Wave',
+            'boomerang': 'Boomerang',
+            'split': 'Splitter'
         }
         self.next_unlock_text = self.canvas.create_text(self.width//2, 50, text="", fill="#88ddff", font=("Arial", 16))
         self.lives = 1
@@ -117,7 +124,10 @@ class bullet_hell_game:
             'laser': 140,
             'homing': 155,
             'spiral': 175,
-            'radial': 195
+            'radial': 195,
+            'wave': 210,
+            'boomerang': 225,
+            'split': 240
         }
         self.update_game()
 
@@ -292,6 +302,9 @@ class bullet_hell_game:
         self.homing_bullets = []
         self.spiral_bullets = []
         self.radial_bullets = []
+        self.wave_bullets = []
+        self.boomerang_bullets = []
+        self.split_bullets = []
         # Reset scores/timers
         self.score = 0
         self.timee = int(time.time())
@@ -327,7 +340,10 @@ class bullet_hell_game:
             'laser': 140,
             'homing': 155,
             'spiral': 175,
-            'radial': 195
+            'radial': 195,
+            'wave': 210,
+            'boomerang': 225,
+            'split': 240
         }
         self.update_game()
 
@@ -526,6 +542,39 @@ class bullet_hell_game:
                 bullet = self.canvas.create_oval(cx-8, cy-8, cx+8, cy+8, fill="#ff00ff")
                 self.radial_bullets.append((bullet, vx, vy))
 
+    # ---------- New bullet pattern spawners (Wave, Boomerang, Split) ----------
+    def shoot_wave_bullet(self):
+        """Bullet that moves downward while wobbling horizontally (sinusoidal)."""
+        if not self.game_over:
+            x = random.randint(40, self.width-40)
+            size = 18
+            bullet = self.canvas.create_oval(x-size//2, 0, x+size//2, size, fill="#33aaff")
+            base_x = x
+            phase = random.uniform(0, 2*math.pi)
+            amp = random.randint(40, 90)
+            vy = 5 + self.difficulty/4
+            phase_speed = 0.25 + self.difficulty/30
+            self.wave_bullets.append((bullet, base_x, phase, amp, vy, phase_speed))
+
+    def shoot_boomerang_bullet(self):
+        """Bullet that goes down then returns upward (boomerang)."""
+        if not self.game_over:
+            x = random.randint(30, self.width-30)
+            size = 22
+            bullet = self.canvas.create_oval(x-size//2, 0, x+size//2, size, fill="#ffaa33")
+            vy = 8 + self.difficulty/3
+            timer = random.randint(18, 30)  # frames moving down before returning
+            self.boomerang_bullets.append((bullet, vy, timer, 'down'))
+
+    def shoot_split_bullet(self):
+        """Bullet that falls then splits into fragments that spread out."""
+        if not self.game_over:
+            x = random.randint(30, self.width-30)
+            size = 24
+            bullet = self.canvas.create_oval(x-size//2, 0, x+size//2, size, fill="#ffffff", outline="#ff55ff", width=2)
+            timer = random.randint(20, 35)
+            self.split_bullets.append((bullet, timer))
+
     def shoot_bouncing_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
@@ -671,9 +720,7 @@ class bullet_hell_game:
                 self.graze_effect_id = None
         # Increase difficulty every 60 seconds
         now = time.time()
-        if now - self.last_difficulty_increase > 60:
-            self.difficulty += 1
-            self.last_difficulty_increase = now
+    # Difficulty scaling removed
         if now - self.lastdial > 10:
             self.get_dialog_string()
             self.lastdial = now
@@ -692,24 +739,27 @@ class bullet_hell_game:
         else:
             self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
 
-        # Lower values mean higher spawn rate
-        bullet_chance = max(4, 30 - self.difficulty)
-        bullet2_chance = max(4, 30 - self.difficulty)
-        diag_chance = max(10, 60 - self.difficulty * 2)
-        boss_chance = max(20, 150 - self.difficulty * 5)
-        zigzag_chance = max(10, 80 - self.difficulty * 2)
-        fast_chance = max(6, 50 - self.difficulty)
-        star_chance = max(16, 80 - self.difficulty * 2)
-        rect_chance = max(12, 60 - self.difficulty * 2)
-        laser_chance = max(30, 120 - self.difficulty * 4)
-        triangle_chance = max(10, 70 - self.difficulty * 2)
-        quad_chance = max(8, 40 - self.difficulty)
-        egg_chance = max(10, 60 - self.difficulty * 2)
-        bouncing_chance = max(15, 90 - self.difficulty * 2)
-        exploding_chance = max(20, 100 - self.difficulty * 2)
-        homing_chance = max(25, 140 - self.difficulty * 4)
-        spiral_chance = max(30, 160 - self.difficulty * 5)
-        radial_chance = max(40, 200 - self.difficulty * 6)
+        # Fixed spawn chances (1 in N each frame after unlock)
+        bullet_chance = 18
+        bullet2_chance = 22
+        diag_chance = 28
+        boss_chance = 140
+        zigzag_chance = 40
+        fast_chance = 30
+        star_chance = 55
+        rect_chance = 48
+        laser_chance = 160
+        triangle_chance = 46
+        quad_chance = 52
+        egg_chance = 50
+        bouncing_chance = 70
+        exploding_chance = 90
+        homing_chance = 110
+        spiral_chance = 130
+        radial_chance = 150
+        wave_chance = 160
+        boomerang_chance = 170
+        split_chance = 180
 
         # Time-based unlock gating (progressive difficulty)
         t = time_survived
@@ -747,8 +797,14 @@ class bullet_hell_game:
             self.shoot_spiral_bullet()
         if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
             self.shoot_radial_burst()
+        if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
+            self.shoot_wave_bullet()
+        if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
+            self.shoot_boomerang_bullet()
+        if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
+            self.shoot_split_bullet()
         # Move triangle bullets
-        triangle_speed = 7 + self.difficulty // 2
+
         for bullet_tuple in self.triangle_bullets[:]:
             bullet, direction = bullet_tuple
             self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
@@ -882,17 +938,18 @@ class bullet_hell_game:
                 self.lasers[idx] = (laser_id, y, timer)
 
         # Bullet speeds scale with difficulty
-        bullet_speed = 6 + self.difficulty // 2
-        bullet2_speed = 6 + self.difficulty // 2
-        diag_speed = 4 + self.difficulty // 3
-        boss_speed = 8 + self.difficulty // 2
-        zigzag_speed = 5 + self.difficulty // 3
-        fast_speed = 12 + self.difficulty
-        star_speed = 7 + self.difficulty // 2
-        rect_speed = 8 + self.difficulty // 2
-        quad_speed = 6 + self.difficulty // 2
-        egg_speed = 5 + self.difficulty // 3
-        homing_speed = 5.5 + self.difficulty / 3
+        bullet_speed = 7
+        bullet2_speed = 7
+        triangle_speed = 7
+        diag_speed = 5
+        boss_speed = 10
+        zigzag_speed = 5
+        fast_speed = 14
+        star_speed = 8
+        rect_speed = 8
+        quad_speed = 7
+        egg_speed = 6
+        homing_speed = 6
 
         # Move vertical bullets
         for bullet in self.bullets[:]:
@@ -1196,6 +1253,114 @@ class bullet_hell_game:
                 self.radial_bullets.remove(rb_tuple)
                 self.score += 1
                 continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move wave bullets ----------------
+        for wtuple in self.wave_bullets[:]:
+            bullet, base_x, phase, amp, vy, phase_speed = wtuple
+            phase += phase_speed
+            # Get current bullet coords to compute center y
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            height = by2 - by1
+            # Vertical move
+            self.canvas.move(bullet, 0, vy)
+            # Recompute center after vertical move
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            cy = (by1 + by2)/2
+            cx = base_x + math.sin(phase) * amp
+            size = bx2 - bx1
+            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+height/2)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                continue
+            if cy > self.height + 30:
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                self.score += 2
+                continue
+            idx = self.wave_bullets.index(wtuple)
+            self.wave_bullets[idx] = (bullet, base_x, phase, amp, vy, phase_speed)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move boomerang bullets ----------------
+        for btuple in self.boomerang_bullets[:]:
+            bullet, vy, timer, state = btuple
+            if state == 'down':
+                self.canvas.move(bullet, 0, vy)
+                timer -= 1
+                if timer <= 0:
+                    state = 'up'
+            else:  # up
+                self.canvas.move(bullet, 0, -vy*0.8)
+            coords = self.canvas.coords(bullet)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                continue
+            if not coords or coords[3] < -30 or coords[1] > self.height + 40:
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                self.score += 3
+                continue
+            idx = self.boomerang_bullets.index(btuple)
+            self.boomerang_bullets[idx] = (bullet, vy, timer, state)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move split bullets ----------------
+        for stuple in self.split_bullets[:]:
+            bullet, timer = stuple
+            self.canvas.move(bullet, 0, 5 + self.difficulty/4)
+            timer -= 1
+            coords = self.canvas.coords(bullet)
+            if timer <= 0 and coords:
+                # Split into fragments (6) moving outward in a circle
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                frag_count = 6
+                frag_speed = 4 + self.difficulty/5
+                for i in range(frag_count):
+                    ang = (2*math.pi/frag_count)*i
+                    vx = math.cos(ang) * frag_speed
+                    vy2 = math.sin(ang) * frag_speed
+                    frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
+                    self.radial_bullets.append((frag, vx, vy2))
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 3
+                continue
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                continue
+            if coords and coords[1] > self.height:
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 2
+                continue
+            idx = self.split_bullets.index(stuple)
+            self.split_bullets[idx] = (bullet, timer)
             if bullet not in self.grazed_bullets and self.check_graze(bullet):
                 self.score += 1
                 self.grazed_bullets.add(bullet)
