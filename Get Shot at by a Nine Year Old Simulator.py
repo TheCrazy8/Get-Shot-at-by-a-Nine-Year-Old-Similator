@@ -105,6 +105,11 @@ class bullet_hell_game:
         # Practice mode (invincible)
         self.practice_mode = False
         self.practice_text = None
+        # Player movement speed (keys & gamepad)
+        self.player_speed = 15
+        # Joystick handle (Steam Input / Switch Pro)
+        self.joystick = None
+        self.init_gamepad()
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = {
@@ -130,6 +135,69 @@ class bullet_hell_game:
             'split': 240
         }
         self.update_game()
+
+    # -------------- Gamepad / Steam Input Support --------------
+    def init_gamepad(self):
+        """Initialize joystick via pygame. Steam Input maps Switch Pro to XInput; ensure Steam Input is enabled for the game (add as non-Steam game)."""
+        try:
+            pygame.joystick.init()
+            if pygame.joystick.get_count() > 0:
+                self.joystick = pygame.joystick.Joystick(0)
+                self.joystick.init()
+                print(f"Gamepad detected: {self.joystick.get_name()}")
+            else:
+                print("No gamepad detected.")
+        except Exception as e:
+            print("Joystick init failed:", e)
+
+    def poll_gamepad(self):
+        if not self.joystick or self.paused or self.game_over:
+            return
+        try:
+            pygame.event.pump()
+        except Exception:
+            return
+        deadzone = 0.25
+        dx = 0
+        dy = 0
+        # Axes 0 (left/right), 1 (up/down) on most controllers
+        try:
+            ax0 = self.joystick.get_axis(0)
+            ax1 = self.joystick.get_axis(1)
+            if abs(ax0) > deadzone:
+                dx = ax0
+            if abs(ax1) > deadzone:
+                dy = ax1
+        except Exception:
+            pass
+        # Hat fallback
+        if dx == 0 and dy == 0:
+            try:
+                if self.joystick.get_numhats() > 0:
+                    hx, hy = self.joystick.get_hat(0)
+                    dx = hx
+                    dy = hy
+            except Exception:
+                pass
+        if dx or dy:
+            # Normalize diagonal
+            mag = (dx*dx + dy*dy) ** 0.5
+            if mag > 1e-3:
+                dx /= mag
+                dy /= mag
+            self.apply_player_move(dx * self.player_speed, dy * self.player_speed)
+
+    def apply_player_move(self, dx, dy):
+        if self.paused or self.game_over:
+            return
+        if dx == 0 and dy == 0:
+            return
+        x1, y1, x2, y2 = self.canvas.coords(self.player)
+        width = x2 - x1
+        height = y2 - y1
+        nx1 = max(0, min(self.width - width, x1 + dx))
+        ny1 = max(0, min(self.height - height, y1 + dy))
+        self.canvas.coords(self.player, nx1, ny1, nx1 + width, ny1 + height)
 
     # ---------------- Vaporwave background setup ----------------
     def init_background(self):
@@ -590,18 +658,15 @@ class bullet_hell_game:
     def move_player(self, event):
         if self.paused or self.game_over:
             return
-        if event.keysym == 'Left' or event.keysym == 'a':
-            if self.canvas.coords(self.player)[0] > 0:
-                self.canvas.move(self.player, -20, 0)
-        elif event.keysym == 'Right' or event.keysym == 'd':
-            if self.canvas.coords(self.player)[2] < self.width:
-                self.canvas.move(self.player, 20, 0)
-        elif event.keysym == 'Up' or event.keysym == 'w':
-            if self.canvas.coords(self.player)[1] > 0:
-                self.canvas.move(self.player, 0, -20)
-        elif event.keysym == 'Down' or event.keysym == 's':
-            if self.canvas.coords(self.player)[3] < self.height:
-                self.canvas.move(self.player, 0, 20)
+        s = self.player_speed
+        if event.keysym in ('Left','a'):
+            self.apply_player_move(-s,0)
+        elif event.keysym in ('Right','d'):
+            self.apply_player_move(s,0)
+        elif event.keysym in ('Up','w'):
+            self.apply_player_move(0,-s)
+        elif event.keysym in ('Down','s'):
+            self.apply_player_move(0,s)
 
     def toggle_pause(self, event=None):
         if self.game_over:
@@ -697,6 +762,8 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+    # Gamepad polling
+        self.poll_gamepad()
         # Background animation
         self.update_background()
         self.canvas.lift(self.dialog)
