@@ -796,6 +796,7 @@ class bullet_hell_game:
             "I could really go for some applesauce... Or mortal flesh...",
             "Why do you keep trying? You know you'll never win against me!",
             "Do you hear them singing? They're all my friends. They lost, too",
+            "There isn't really an end to this.  it just keeps going and going and going... \n Belive me, I've tried to stop it."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
