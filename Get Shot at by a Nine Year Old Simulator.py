@@ -1,4 +1,3 @@
-"""\nLore Integration: The Rift Between Time and Space\n=================================================\n\n(Non-intrusive lore block added; no existing code removed.)\n\n🌌 The Rift Between Time and Space\n---------------------------------\nNature of the Rift: A neon-etched liminal zone where discarded timelines and forgotten realities collapse. Moments do not pass — they stack like cassette layers. VHS sunsets loop forever; broken statues drift; obsolete gods hum as static.\nLaw of the Rift: Time is an overlapping tape. Past and future flicker interchangeably. Entities here are memory-knots: nostalgia, error, and refusal to be deleted.\n\n👻 J, the Immortal Child\n------------------------\nOrigin: J was a real child from a timeline that never fully happened. That reality was erased, but their record was too corrupted to purge. The Rift keeps the file open — so J cannot age or end. Immortality by bureaucratic failure.\nPersonality: Sing‑song, glitchy, playful, unsettling. Speech loops like a scratched CD; phrases repeat with tiny mutations. They think it’s a game. Or pretend it is.\nWhy They Hunt You: You are an unindexed anomaly. J believes “beating” you lets them grow up or exit. Whether that’s true, delusion, or implanted is unknown.\n\n🌀 The Conflict (Memory Fragments)\n---------------------------------\nEach phase = a memory shard: malls that never opened, concerts that never ended, summers the universe revoked. Bullets = memory/data fragments. A hit doesn’t wound — it overwrites. Too many overwrites and you desync, dissolving into echo static.\n\n🧩 Hidden Lore Signals\n----------------------\nGraffiti: “THE CHILD IS OLDER THAN THE GRID.”\nAudio Ghosting: Faint parental calls phase through reverb.\nStatic Witnesses: Frozen silhouettes at erasure-moments.\nEndgame Seed: Maybe J isn’t the jailer — maybe both of you are being audited by a deeper Warden Process.\n\n(Do NOT edit indentation or remove code per user instruction.)\n"""
 import tkinter as tk
 import random
 import time
@@ -644,7 +643,7 @@ class bullet_hell_game:
             "Sometimes I feel like I'm being watched... but it's probably just my imagination.",
             "Let's make a deal: you let me win, and I'll let you live... Maybe.",
             "I know all your secrets. Don't worry, I won't tell anyone... yet.",
-            "Why do you keep playing this game? Don't you have anything better to do? \n Oh wait- you can't stop playing, can you?",
+            "Why do you keep playing this game? Don't you have anything better to do? Oh wait- you can't stop playing, can you?",
             "If you get tired, you can always take a nap... forever...",
             "I like your style! Let's see how long you can keep up with me!",
             "You're doing great! But can you do better? Heehee!",
@@ -657,7 +656,7 @@ class bullet_hell_game:
             "I could really go for some applesauce... Or mortal flesh...",
             "Why do you keep trying? You know you'll never win against me!",
             "Do you hear them singing? They're all my friends. They lost, too",
-            "There isn't really an end to this.  it just keeps going and going and going... \n Belive me, I've tried to stop it."
+            "There isn't really an end to this.  it just keeps going and going and going... Belive me, I've tried to stop it."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
