@@ -951,6 +951,53 @@ class bullet_hell_game:
             return True
         return False
 
+    def check_collision(self, bullet):
+        """Axis-aligned hitbox collision between player rectangle and a bullet shape.
+        Supports ovals/rectangles (4 coords) and polygons (>=6 coords). Returns True on hit.
+        """
+        if self.practice_mode or self.game_over:
+            return False
+        try:
+            b = self.canvas.coords(bullet)
+            if not b:
+                return False
+            # Player rectangle
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            # Bullet bounding box
+            if len(b) == 4:
+                bx1, by1, bx2, by2 = b
+            else:
+                xs = b[::2]
+                ys = b[1::2]
+                bx1, bx2 = min(xs), max(xs)
+                by1, by2 = min(ys), max(ys)
+            # AABB overlap
+            if px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1:
+                self.handle_player_hit()
+                return True
+        except Exception:
+            return False
+        return False
+
+    def handle_player_hit(self):
+        """Process a player hit: decrement life (if multiple), or trigger game over animation."""
+        if self.game_over:
+            return
+        self.lives -= 1
+        if self.lives <= 0:
+            self.game_over = True
+            # Start game over animation if available
+            try:
+                self.start_game_over_animation()
+            except Exception:
+                pass
+        else:
+            # Flash player or simple feedback (placeholder)
+            try:
+                self.canvas.itemconfig(self.player, fill="#ffffff")
+            except Exception:
+                pass
+
     def update_game(self):
         if self.game_over:
             return
