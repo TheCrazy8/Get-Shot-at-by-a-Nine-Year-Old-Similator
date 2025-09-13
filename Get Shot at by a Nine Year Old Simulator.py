@@ -89,11 +89,15 @@ class bullet_hell_game:
         self.root.bind("<KeyPress>", self.move_player)
         self.root.bind("<Escape>", self.toggle_pause)
         self.root.bind("r", self.restart_game)
+        self.root.bind("p", self.toggle_practice_mode)
         self.grazing_radius = 40
         self.grazed_bullets = set()
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
+        # Practice mode (invincible)
+        self.practice_mode = False
+        self.practice_text = None
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = {
@@ -136,6 +140,24 @@ class bullet_hell_game:
         self.grid_glow_cycle = 0.0
         # Clear any prior lines (if restarting) - canvas itself is cleared by caller on restart
         self._create_grid_lines()
+
+    def toggle_practice_mode(self, event=None):
+        was = self.practice_mode
+        self.practice_mode = not self.practice_mode
+        if self.practice_mode:
+            label = "Practice: ON"
+            color = "#33ff77"
+            if self.practice_text is None:
+                self.practice_text = self.canvas.create_text(self.width-120, 80, text=label, fill=color, font=("Arial", 14))
+            else:
+                self.canvas.itemconfig(self.practice_text, text=label, fill=color)
+            self.canvas.lift(self.practice_text)
+        else:
+            if self.practice_text is not None:
+                self.canvas.delete(self.practice_text)
+                self.practice_text = None
+            # Restart game immediately in normal mode
+            self.restart_game(force=True)
 
     def _create_grid_lines(self):
         # Create horizontal perspective lines (closer lines farther apart toward bottom)
@@ -240,8 +262,8 @@ class bullet_hell_game:
         for line_id, _ in self.grid_v_lines:
             self.canvas.tag_lower(line_id)
 
-    def restart_game(self, event=None):
-        if not self.game_over:
+    def restart_game(self, event=None, force=False):
+        if not self.game_over and not force:
             return
         # Clear canvas
         for item in self.canvas.find_all():
@@ -731,13 +753,14 @@ class bullet_hell_game:
             bullet, direction = bullet_tuple
             self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.paused = False
                 self.pause_text = None
                 self.triangle_bullets.remove(bullet_tuple)
-                if self.lives <= 0:
-                    self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
                 if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
@@ -875,11 +898,12 @@ class bullet_hell_game:
         for bullet in self.bullets[:]:
             self.canvas.move(bullet, 0, bullet_speed)
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(bullet)[1] > self.height:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
@@ -894,11 +918,12 @@ class bullet_hell_game:
         for bullet2 in self.bullets2[:]:
             self.canvas.move(bullet2, bullet2_speed, 0)
             if self.check_collision(bullet2):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet2)
                 self.bullets2.remove(bullet2)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(bullet2)[0] > self.width:
                 self.canvas.delete(bullet2)
                 self.bullets2.remove(bullet2)
@@ -913,11 +938,12 @@ class bullet_hell_game:
         for egg_bullet in self.egg_bullets[:]:
             self.canvas.move(egg_bullet, 0, egg_speed)
             if self.check_collision(egg_bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(egg_bullet)
                 self.egg_bullets.remove(egg_bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(egg_bullet)[1] > self.height:
                 self.canvas.delete(egg_bullet)
                 self.egg_bullets.remove(egg_bullet)
@@ -933,11 +959,12 @@ class bullet_hell_game:
             dbullet, direction = bullet_tuple
             self.canvas.move(dbullet, diag_speed * direction, diag_speed)
             if self.check_collision(dbullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(dbullet)
                 self.diag_bullets.remove(bullet_tuple)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(dbullet)[1] > self.height:
                 self.canvas.delete(dbullet)
                 self.diag_bullets.remove(bullet_tuple)
@@ -952,11 +979,12 @@ class bullet_hell_game:
         for boss_bullet in self.boss_bullets[:]:
             self.canvas.move(boss_bullet, 0, boss_speed)
             if self.check_collision(boss_bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(boss_bullet)
                 self.boss_bullets.remove(boss_bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(boss_bullet)[1] > self.height:
                 self.canvas.delete(boss_bullet)
                 self.boss_bullets.remove(boss_bullet)
@@ -971,11 +999,12 @@ class bullet_hell_game:
         for bullet in self.bullets[:]:
             self.canvas.move(bullet, 0, quad_speed)
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(bullet)[1] > self.height:
                 self.canvas.delete(bullet)
                 self.bullets.remove(bullet)
@@ -994,11 +1023,12 @@ class bullet_hell_game:
                 direction *= -1
             self.canvas.move(bullet, 5 * direction, zigzag_speed)
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.zigzag_bullets.remove(bullet_tuple)
-                if self.lives <= 0:
-                    self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
                 if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
@@ -1019,11 +1049,12 @@ class bullet_hell_game:
         for fast_bullet in self.fast_bullets[:]:
             self.canvas.move(fast_bullet, 0, fast_speed)
             if self.check_collision(fast_bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(fast_bullet)
                 self.fast_bullets.remove(fast_bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(fast_bullet)[1] > self.height:
                 self.canvas.delete(fast_bullet)
                 self.fast_bullets.remove(fast_bullet)
@@ -1038,11 +1069,12 @@ class bullet_hell_game:
         for star_bullet in self.star_bullets[:]:
             self.canvas.move(star_bullet, 0, star_speed)
             if self.check_collision(star_bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(star_bullet)[1] > self.height:
                 self.canvas.delete(star_bullet)
                 self.star_bullets.remove(star_bullet)
@@ -1057,11 +1089,12 @@ class bullet_hell_game:
         for rect_bullet in self.rect_bullets[:]:
             self.canvas.move(rect_bullet, 0, rect_speed)
             if self.check_collision(rect_bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(rect_bullet)
                 self.rect_bullets.remove(rect_bullet)
-                if self.lives <= 0:
-                    self.end_game()
             elif self.canvas.coords(rect_bullet)[1] > self.height:
                 self.canvas.delete(rect_bullet)
                 self.rect_bullets.remove(rect_bullet)
@@ -1097,11 +1130,12 @@ class bullet_hell_game:
             self.homing_bullets[idx] = (bullet, vx, vy)
             # Collision / out of bounds
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.homing_bullets.remove((bullet, vx, vy))
-                if self.lives <= 0:
-                    self.end_game()
             else:
                 coords = self.canvas.coords(bullet)
                 if not coords or coords[1] > self.height or coords[0] < -40 or coords[2] > self.width + 40:
@@ -1124,11 +1158,12 @@ class bullet_hell_game:
             self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
             # Collision & removal
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.spiral_bullets.remove(sp_tuple)
-                if self.lives <= 0:
-                    self.end_game()
                 continue
             if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
                 self.canvas.delete(bullet)
@@ -1148,11 +1183,12 @@ class bullet_hell_game:
             bullet, vx, vy = rb_tuple
             self.canvas.move(bullet, vx, vy)
             if self.check_collision(bullet):
-                self.lives -= 1
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
                 self.canvas.delete(bullet)
                 self.radial_bullets.remove(rb_tuple)
-                if self.lives <= 0:
-                    self.end_game()
                 continue
             coords = self.canvas.coords(bullet)
             if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
