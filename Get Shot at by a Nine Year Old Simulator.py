@@ -69,6 +69,27 @@ class bullet_hell_game:
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
+        # Progressive unlock times (seconds survived) for bullet categories
+        # 0: basic vertical (already active), later adds more complexity.
+        self.unlock_times = {
+            'vertical': 0,
+            'horizontal': 8,
+            'diag': 15,
+            'triangle': 25,
+            'quad': 35,
+            'zigzag': 45,
+            'fast': 55,
+            'rect': 65,
+            'star': 75,
+            'egg': 85,
+            'boss': 95,
+            'bouncing': 110,
+            'exploding': 125,
+            'laser': 140,
+            'homing': 155,
+            'spiral': 175,
+            'radial': 195
+        }
         self.update_game()
         
     def restart_game(self, event=None):
@@ -112,6 +133,25 @@ class bullet_hell_game:
         self.lastdial = time.time()
         self.paused_time_total = 0
         self.pause_start_time = None
+        self.unlock_times = {
+            'vertical': 0,
+            'horizontal': 8,
+            'diag': 15,
+            'triangle': 25,
+            'quad': 35,
+            'zigzag': 45,
+            'fast': 55,
+            'rect': 65,
+            'star': 75,
+            'egg': 85,
+            'boss': 95,
+            'bouncing': 110,
+            'exploding': 125,
+            'laser': 140,
+            'homing': 155,
+            'spiral': 175,
+            'radial': 195
+        }
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -481,39 +521,41 @@ class bullet_hell_game:
         spiral_chance = max(30, 160 - self.difficulty * 5)
         radial_chance = max(40, 200 - self.difficulty * 6)
 
-        if random.randint(1, bullet_chance) == 1:
+        # Time-based unlock gating (progressive difficulty)
+        t = time_survived
+        if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
             self.shoot_bullet()
-        if random.randint(1, bullet2_chance) == 1:
+        if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
             self.shoot_bullet2()
-        if random.randint(1, diag_chance) == 1:
+        if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
             self.shoot_diag_bullet()
-        if random.randint(1, boss_chance) == 1:
+        if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
             self.shoot_boss_bullet()
-        if random.randint(1, zigzag_chance) == 1:
+        if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
             self.shoot_zigzag_bullet()
-        if random.randint(1, fast_chance) == 1:
+        if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
             self.shoot_fast_bullet()
-        if random.randint(1, star_chance) == 1:
+        if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
             self.shoot_star_bullet()
-        if random.randint(1, rect_chance) == 1:
+        if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
             self.shoot_rect_bullet()
-        if random.randint(1, laser_chance) == 1:
+        if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
             self.shoot_horizontal_laser()
-        if random.randint(1, triangle_chance) == 1:
+        if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
             self.shoot_triangle_bullet()
-        if random.randint(1, quad_chance) == 1:
+        if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
             self.shoot_quad_bullet()
-        if random.randint(1, egg_chance) == 1:
+        if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
             self.shoot_egg_bullet()
-        if random.randint(1, bouncing_chance) == 1:
+        if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
             self.shoot_bouncing_bullet()
-        if random.randint(1, exploding_chance) == 1:
+        if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
             self.shoot_exploding_bullet()
-        if random.randint(1, homing_chance) == 1:
+        if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
             self.shoot_homing_bullet()
-        if random.randint(1, spiral_chance) == 1:
+        if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
             self.shoot_spiral_bullet()
-        if random.randint(1, radial_chance) == 1:
+        if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
             self.shoot_radial_burst()
         # Move triangle bullets
         triangle_speed = 7 + self.difficulty // 2
