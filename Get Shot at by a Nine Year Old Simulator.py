@@ -2243,6 +2243,11 @@ class bullet_hell_game:
         self.go_anim_active = True
         self.go_anim_particles = []
         self.go_anim_frame = 0
+        # Glitch blackout sequence state (fix indentation)
+        self.go_glitch_phase = 0  # 0 = glitching, 1 = fading to black, 2 = black hold
+        self.go_glitch_rects = []
+        self.go_black_cover = None
+        self.go_black_alpha = 0.0
         # Large pulsing overlay text (separate from static text already created)
         try:
             self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2-140, text="GAME OVER", fill="#ffffff", font=("Arial", 64, "bold"))
@@ -2267,6 +2272,87 @@ class bullet_hell_game:
         if not getattr(self, 'go_anim_active', False):
             return
         self.go_anim_frame += 1
+        # --- Phase 0: Spawn transient glitch rectangles ---
+        if self.go_glitch_phase == 0:
+            # spawn a few per frame early on
+            spawn_ct = 6
+            import random
+            for _ in range(spawn_ct):
+                w = random.randint(40, max(60, self.width//6))
+                h = random.randint(8, 40)
+                x = random.randint(0, self.width - w)
+                y = random.randint(0, self.height - h)
+                col = random.choice(["#ff00ff", "#ffffff", "#ff55ff", "#aa33ff"])  # neon glitch colors
+                rid = self.canvas.create_rectangle(x, y, x+w, y+h, fill=col, outline="")
+                life = random.randint(3, 10)
+                self.go_glitch_rects.append((rid, life))
+            # decay existing glitch rects
+            new_rects = []
+            for rid, life in self.go_glitch_rects:
+                life -= 1
+                if life <= 0:
+                    try: self.canvas.delete(rid)
+                    except Exception: pass
+                else:
+                    # occasional horizontal shift for jitter
+                    try:
+                        dx = random.randint(-8,8)
+                        self.canvas.move(rid, dx, 0)
+                    except Exception: pass
+                    new_rects.append((rid, life))
+            self.go_glitch_rects = new_rects
+            # After some frames, advance to fade phase
+            if self.go_anim_frame > 55:
+                self.go_glitch_phase = 1
+        # --- Phase 1: Fade a black overlay in and delete scene ---
+        elif self.go_glitch_phase == 1:
+            # Create black cover once
+            if self.go_black_cover is None:
+                try:
+                    self.go_black_cover = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#000000", outline="")
+                    self.canvas.itemconfig(self.go_black_cover, stipple="gray12")  # simulate alpha via stipple
+                except Exception:
+                    pass
+            # Increase pseudo alpha
+            self.go_black_alpha += 0.06
+            # Adjust stipple pattern to simulate increasing opacity
+            if self.go_black_cover is not None:
+                # choose denser patterns as alpha rises
+                try:
+                    if self.go_black_alpha > 0.8:
+                        self.canvas.itemconfig(self.go_black_cover, stipple="")  # solid
+                    elif self.go_black_alpha > 0.6:
+                        self.canvas.itemconfig(self.go_black_cover, stipple="gray50")
+                    elif self.go_black_alpha > 0.4:
+                        self.canvas.itemconfig(self.go_black_cover, stipple="gray37")
+                    elif self.go_black_alpha > 0.2:
+                        self.canvas.itemconfig(self.go_black_cover, stipple="gray25")
+                except Exception:
+                    pass
+            # Occasionally delete lingering items beneath
+            if self.go_anim_frame % 9 == 0:
+                for item in self.canvas.find_all():
+                    # keep the black cover & game over text for now
+                    if item in (self.go_black_cover, self.go_anim_text):
+                        continue
+                    try: self.canvas.delete(item)
+                    except Exception: pass
+            if self.go_black_alpha >= 1.0:
+                # Remove text as screen fully blacks
+                try:
+                    if self.go_anim_text is not None:
+                        self.canvas.delete(self.go_anim_text)
+                        self.go_anim_text = None
+                except Exception: pass
+                self.go_glitch_phase = 2
+        # --- Phase 2: Hold black, minimal updates ---
+        elif self.go_glitch_phase == 2:
+            # No further visuals; allow a restart key prompt optionally
+            if self.go_anim_frame % 40 == 0 and getattr(self, 'go_anim_text', None) is None:
+                try:
+                    self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2, text="PRESS R TO RESTART", fill="#4444ff", font=("Arial", 24))
+                except Exception:
+                    pass
         # Pulse text color / scale
         if self.go_anim_text is not None:
             phase = math.sin(self.go_anim_frame * 0.18) * 0.5 + 0.5  # 0..1
@@ -2305,7 +2391,8 @@ class bullet_hell_game:
                 self.canvas.delete(pid)
         self.go_anim_particles = new_particles
         # Stop after particles gone and some frames passed
-        if self.go_anim_frame > 220 and not self.go_anim_particles:
+        if self.go_glitch_phase == 2 and self.go_anim_frame > 400:
+            # Stop updating; final blackout stable
             self.go_anim_active = False
             return
         # Schedule next frame (decoupled from main game loop which is halted)
