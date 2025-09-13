@@ -5,6 +5,7 @@ import pygame
 import sys
 import os
 import math
+import argparse
 try:
     # Optional Steam Input (Steamworks) support
     from steamworks import STEAMWORKS
@@ -13,7 +14,7 @@ except Exception:
     _STEAMWORKS_AVAILABLE = False
 
 class bullet_hell_game:
-    def __init__(self, root, bg_color_interval=6):
+    def __init__(self, root, bg_color_interval=6, lore_tone=None):
         # Initialize pygame mixer and play music
         pygame.mixer.init()
         try:
@@ -153,6 +154,85 @@ class bullet_hell_game:
             'split': 240
         }
         self.update_game()
+    # -------------- Lore system --------------
+    # Tone can be 'horror' or 'surreal'. User can later switch; default blended.
+        self.lore_tone = lore_tone or os.environ.get('LORE_TONE', 'blended')  # 'horror' | 'surreal' | 'blended'
+        # Track which unlock keys already yielded lore so we only show once.
+        self.lore_shown_keys = set()
+        # Memory fragment lore mapped to unlock pattern keys.
+        self.lore_fragments = {
+            'vertical': [
+                "RIFT LOG: Session resumes. Geometry stabilizing...",
+                "A grid unfolds. Time fails to start."
+            ],
+            'horizontal': [
+                "J: Why won't the clock tick? It just hums...",
+            ],
+            'diag': [
+                "Fragment: Mall grand opening (never occurred). Neon receipts flutter like moths.",
+            ],
+            'triangle': [
+                "You feel watched by statues that were deleted yesterday.",
+            ],
+            'quad': [
+                "J (echoing): If I tag you— do I get to grow up?",
+            ],
+            'zigzag': [
+                "Timeline splice error: childhood loop persists.",
+            ],
+            'fast': [
+                "Overlapping summers pile like melted tape.",
+            ],
+            'rect': [
+                "System note: SUBJECT_J record flagged 'undeletable/corrupt'.",
+            ],
+            'star': [
+                "Bullets = memory shards. Impact overwrites, not wounds.",
+            ],
+            'egg': [
+                "You hear two distant voices calling a name that never registers.",
+            ],
+            'boss': [
+                "Archive Guardian sniffs anomaly presence... then forgets.",
+            ],
+            'bouncing': [
+                "Reflections of choices you never made rebound around you.",
+            ],
+            'exploding': [
+                "Compressed years rupture into splinters of almost-life.",
+            ],
+            'laser': [
+                "Red line = deletion cursor. It keeps missing J's slot.",
+            ],
+            'homing': [
+                "The Rift adapts— it wants classification. You remain uncatalogued.",
+            ],
+            'spiral': [
+                "Memories spin outward seeking anchor. None found.",
+            ],
+            'radial': [
+                "Burst event: orphaned birthday parties disperse as light.",
+            ],
+            'wave': [
+                "Cassette warble. Dialogue repeating with fresh cracks.",
+            ],
+            'boomerang': [
+                "Attempts to exit arc back— boundary enforcement routine.",
+            ],
+            'split': [
+                "Final fragment: J whispers: 'If you leave, take me with.'"
+            ]
+        }
+        # Horror vs surreal flavor amplifiers (prefix/suffix) applied when showing.
+        self.lore_flavor = {
+            'horror': ["(audio smear)", "(static bloom)", "(signal decay)"],
+            'surreal': ["(liminal hush)", "(synthetic breeze)", "(ghost neon)"],
+            'blended': ["(glitch shimmer)", "(tape echo)", "(grid sigh)"]
+        }
+        self.active_lore_label = None
+        self.active_lore_timer = 0  # frames remaining
+        # Subtle graffiti (created once)
+        self._create_graffiti_layer()
 
     # -------------- Gamepad / Steam Input Support --------------
     def init_steam_input(self):
@@ -393,6 +473,76 @@ class bullet_hell_game:
         self.grid_glow_cycle = 0.0
         # Clear any prior lines (if restarting) - canvas itself is cleared by caller on restart
         self._create_grid_lines()
+    # -------------- Lore graffiti --------------
+    def _create_graffiti_layer(self):
+        """Place faint, stylized lore graffiti along edges. Lowered behind gameplay."""
+        phrases = [
+            "THE CHILD IS OLDER THAN THE GRID",
+            "STACKED MOMENTS",
+            "CORRUPT ENTRY: J",
+            "OVERWRITE PENDING",
+            "ANOMALY = YOU",
+        ]
+        self.graffiti_items = []
+        for i, txt in enumerate(phrases):
+            x = 40 if i % 2 == 0 else self.width - 40
+            y = 120 + i * 90
+            ang = -70 if i % 2 == 0 else 70
+            item = self.canvas.create_text(x, y, text=txt, fill="#222844", font=("Arial", 28, "bold"))
+            # Tkinter lacks native rotation; mimic by spacing + newline maybe later; keep simple.
+            # Reduce opacity illusion by choosing dark near-bg color.
+            self.canvas.tag_lower(item)
+            self.graffiti_items.append(item)
+        # Ensure background lines still beneath
+        for line_id, _ in getattr(self, 'grid_h_lines', []):
+            self.canvas.tag_lower(line_id)
+        for line_id, _ in getattr(self, 'grid_v_lines', []):
+            self.canvas.tag_lower(line_id)
+
+    # -------------- Lore presentation --------------
+    def _pick_flavor_suffix(self):
+        choices = self.lore_flavor.get(self.lore_tone, self.lore_flavor['blended'])
+        return random.choice(choices)
+
+    def show_lore_fragment(self, key):
+        """Display a lore fragment tied to an unlock key once. Replaces existing, timed fade."""
+        if key in self.lore_shown_keys:
+            return
+        frags = self.lore_fragments.get(key)
+        if not frags:
+            return
+        base = random.choice(frags)
+        suffix = self._pick_flavor_suffix()
+        text = f"{base} {suffix}" if suffix else base
+        # Remove previous
+        if self.active_lore_label:
+            self.canvas.delete(self.active_lore_label)
+        # Top center below main dialog
+        self.active_lore_label = self.canvas.create_text(self.width//2, 60, text=text, fill="#9ee6ff", font=("Consolas", 18), justify="center")
+        self.canvas.lift(self.active_lore_label)
+        self.lore_shown_keys.add(key)
+        self.active_lore_timer = 120  # ~6 seconds at 50ms
+
+    def _update_lore_label(self):
+        if not self.active_lore_label:
+            return
+        self.active_lore_timer -= 1
+        if self.active_lore_timer <= 0:
+            self.canvas.delete(self.active_lore_label)
+            self.active_lore_label = None
+            return
+        # Simple fade last 40 frames
+        if self.active_lore_timer < 40:
+            alpha_phase = self.active_lore_timer / 40
+            # Interpolate color toward background (approx). We'll just dim via hex blending toward 00.
+            base_col = (158, 230, 255)
+            dim = tuple(int(c * alpha_phase) for c in base_col)
+            self.canvas.itemconfig(self.active_lore_label, fill=f"#{dim[0]:02x}{dim[1]:02x}{dim[2]:02x}")
+
+    # Placeholder for future whisper audio (not implemented now to avoid asset need)
+    def play_whisper(self, key):  # noqa: unused
+        """Future: play a subtle one-shot whisper sample associated with lore key."""
+        return
 
     def toggle_practice_mode(self, event=None):
         was = self.practice_mode
@@ -997,6 +1147,10 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
         else:
             self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
+        # Show lore for newly unlocked categories (time just passed requirement this frame)
+        for key, unlock_t in self.unlock_times.items():
+            if key not in self.lore_shown_keys and time_survived >= unlock_t:
+                self.show_lore_fragment(key)
 
         # Fixed spawn chances (1 in N each frame after unlock)
         bullet_chance = 18
@@ -1649,7 +1803,8 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
-
+    # Update lore label (timed fade)
+        self._update_lore_label()
         self.root.after(50, self.update_game)
 
     def check_collision(self, bullet):
@@ -1670,6 +1825,10 @@ class bullet_hell_game:
         self.root.bind("r", self.restart_game)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Get Shot at by a Nine Year Old Simulator")
+    parser.add_argument('--lore-tone', choices=['horror','surreal','blended'], help='Lore flavor tone override')
+    parser.add_argument('--bg-interval', type=float, default=6, help='Seconds between background color shifts')
+    args = parser.parse_args()
     root = tk.Tk()
-    game = bullet_hell_game(root)
+    game = bullet_hell_game(root, bg_color_interval=args.bg_interval, lore_tone=args.lore_tone)
     root.mainloop()
