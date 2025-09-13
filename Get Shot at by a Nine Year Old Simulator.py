@@ -14,7 +14,7 @@ except Exception:
     _STEAMWORKS_AVAILABLE = False
 
 class bullet_hell_game:
-    def __init__(self, root, bg_color_interval=6, lore_tone=None):
+    def __init__(self, root, bg_color_interval=6, lore_tone=None, debug=False):
         # Initialize pygame mixer and play music
         pygame.mixer.init()
         try:
@@ -44,6 +44,8 @@ class bullet_hell_game:
         self.player_glow_phase = 0.0
         self.player_rgb_phase = 0.0  # for rainbow fill
         self.create_player_sprite()
+        # Debug / diagnostics
+        self.debug = debug
         self.bullets = []
         self.bullets2 = []
         self.triangle_bullets = []  # [(bullet_id, direction)]
@@ -543,6 +545,17 @@ class bullet_hell_game:
     def play_whisper(self, key):  # noqa: unused
         """Future: play a subtle one-shot whisper sample associated with lore key."""
         return
+
+    # -------------- Diagnostics --------------
+    def log_error(self, exc: Exception):
+        """Write exception + stack trace to error.log for post-mortem if the window closes."""
+        import traceback, datetime
+        try:
+            with open("error.log", "a", encoding="utf-8") as f:
+                f.write("\n==== Exception @ " + datetime.datetime.now().isoformat() + " ====\n")
+                traceback.print_exc(file=f)
+        except Exception:
+            pass  # Never let logging itself crash the game
 
     def toggle_practice_mode(self, event=None):
         was = self.practice_mode
@@ -1096,126 +1109,130 @@ class bullet_hell_game:
         return False
 
     def update_game(self):
-        if self.game_over:
-            return
-        if self.paused:
-            return
-        # Steam Input preferred, fallback to pygame joystick
-        used_steam = self.poll_steam_input()
-        if not used_steam:
-            self.poll_gamepad()
-    # Background animation
-        self.update_background()
-    # Animate player decorative sprite
-        self.animate_player_sprite()
-        self.canvas.lift(self.dialog)
-        self.canvas.lift(self.scorecount)
-        self.canvas.lift(self.timecount)
-        if hasattr(self, 'next_unlock_text'):
-            self.canvas.lift(self.next_unlock_text)
-        # Move graze effect to follow player if active
-        if self.graze_effect_id:
-            px1, py1, px2, py2 = self.canvas.coords(self.player)
-            cx = (px1 + px2) / 2
-            cy = (py1 + py2) / 2
-            self.canvas.coords(
-                self.graze_effect_id,
-                cx - self.grazing_radius, cy - self.grazing_radius,
-                cx + self.grazing_radius, cy + self.grazing_radius
-            )
-            self.graze_effect_timer -= 1
-            if self.graze_effect_timer <= 0:
-                self.canvas.delete(self.graze_effect_id)
-                self.graze_effect_id = None
-        # Increase difficulty every 60 seconds
-        now = time.time()
-    # Difficulty scaling removed
-        if now - self.lastdial > 10:
-            self.get_dialog_string()
-            self.lastdial = now
-            self.canvas.itemconfig(self.dialog, text=self.dial)
-        # Calculate time survived, pausable
-        time_survived = int(now - self.timee - self.paused_time_total)
-        self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
-        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
-        # Compute next unlock pattern
-        remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
-        if remaining_candidates:
-            # Pick soonest
-            pat, secs = min(remaining_candidates, key=lambda x: x[1])
-            display = self.pattern_display_names.get(pat, pat.title())
-            self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
-        else:
-            self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
-        # Show lore for newly unlocked categories (time just passed requirement this frame)
-        for key, unlock_t in self.unlock_times.items():
-            if key not in self.lore_shown_keys and time_survived >= unlock_t:
-                self.show_lore_fragment(key)
-
-        # Fixed spawn chances (1 in N each frame after unlock)
-        bullet_chance = 18
-        bullet2_chance = 22
-        diag_chance = 28
-        boss_chance = 140
-        zigzag_chance = 40
-        fast_chance = 30
-        star_chance = 55
-        rect_chance = 48
-        laser_chance = 160
-        triangle_chance = 46
-        quad_chance = 52
-        egg_chance = 50
-        bouncing_chance = 70
-        exploding_chance = 90
-        homing_chance = 110
-        spiral_chance = 130
-        radial_chance = 150
-        wave_chance = 160
-        boomerang_chance = 170
-        split_chance = 180
-
-        # Time-based unlock gating (progressive difficulty)
-        t = time_survived
-        if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
-            self.shoot_bullet()
-        if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
-            self.shoot_bullet2()
-        if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
-            self.shoot_diag_bullet()
-        if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
-            self.shoot_boss_bullet()
-        if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
-            self.shoot_zigzag_bullet()
-        if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
-            self.shoot_fast_bullet()
-        if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
-            self.shoot_star_bullet()
-        if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
-            self.shoot_rect_bullet()
-        if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
-            self.shoot_horizontal_laser()
-        if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
-            self.shoot_triangle_bullet()
-        if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
-            self.shoot_quad_bullet()
-        if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
-            self.shoot_egg_bullet()
-        if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
-            self.shoot_bouncing_bullet()
-        if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
-            self.shoot_exploding_bullet()
-        if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
-            self.shoot_homing_bullet()
-        if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
-            self.shoot_spiral_bullet()
-        if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
-            self.shoot_radial_burst()
-        if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
-            self.shoot_wave_bullet()
-        if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
-            self.shoot_boomerang_bullet()
-        if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
-            self.shoot_split_bullet()
+        try:
+            if self.game_over or self.paused:
+                return
+            # Input polling
+            used_steam = self.poll_steam_input()
+            if not used_steam:
+                self.poll_gamepad()
+            # Background + player animation
+            self.update_background()
+            self.animate_player_sprite()
+            # Keep HUD on top
+            self.canvas.lift(self.dialog)
+            self.canvas.lift(self.scorecount)
+            self.canvas.lift(self.timecount)
+            if hasattr(self, 'next_unlock_text'):
+                self.canvas.lift(self.next_unlock_text)
+            # Graze visual tracking
+            if self.graze_effect_id:
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                cx = (px1 + px2) / 2
+                cy = (py1 + py2) / 2
+                self.canvas.coords(
+                    self.graze_effect_id,
+                    cx - self.grazing_radius, cy - self.grazing_radius,
+                    cx + self.grazing_radius, cy + self.grazing_radius
+                )
+                self.graze_effect_timer -= 1
+                if self.graze_effect_timer <= 0:
+                    self.canvas.delete(self.graze_effect_id)
+                    self.graze_effect_id = None
+            # Dialog refresh
+            now = time.time()
+            if now - self.lastdial > 10:
+                self.get_dialog_string()
+                self.lastdial = now
+                self.canvas.itemconfig(self.dialog, text=self.dial)
+            # Time / score HUD
+            time_survived = int(now - self.timee - self.paused_time_total)
+            self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
+            self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+            # Next unlock HUD
+            remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
+            if remaining_candidates:
+                pat, secs = min(remaining_candidates, key=lambda x: x[1])
+                display = self.pattern_display_names.get(pat, pat.title())
+                self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
+            else:
+                self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
+            # Lore triggers
+            for key, unlock_t in self.unlock_times.items():
+                if key not in self.lore_shown_keys and time_survived >= unlock_t:
+                    self.show_lore_fragment(key)
+            # Spawn chances
+            bullet_chance = 18
+            bullet2_chance = 22
+            diag_chance = 28
+            boss_chance = 140
+            zigzag_chance = 40
+            fast_chance = 30
+            star_chance = 55
+            rect_chance = 48
+            laser_chance = 160
+            triangle_chance = 46
+            quad_chance = 52
+            egg_chance = 50
+            bouncing_chance = 70
+            exploding_chance = 90
+            homing_chance = 110
+            spiral_chance = 130
+            radial_chance = 150
+            wave_chance = 160
+            boomerang_chance = 170
+            split_chance = 180
+            t = time_survived
+            if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
+                self.shoot_bullet()
+            if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
+                self.shoot_bullet2()
+            if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
+                self.shoot_diag_bullet()
+            if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
+                self.shoot_boss_bullet()
+            if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
+                self.shoot_zigzag_bullet()
+            if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
+                self.shoot_fast_bullet()
+            if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
+                self.shoot_star_bullet()
+            if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
+                self.shoot_rect_bullet()
+            if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
+                self.shoot_horizontal_laser()
+            if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
+                self.shoot_triangle_bullet()
+            if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
+                self.shoot_quad_bullet()
+            if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
+                self.shoot_egg_bullet()
+            if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
+                self.shoot_bouncing_bullet()
+            if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
+                self.shoot_exploding_bullet()
+            if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
+                self.shoot_homing_bullet()
+            if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
+                self.shoot_spiral_bullet()
+            if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
+                self.shoot_radial_burst()
+            if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
+                self.shoot_wave_bullet()
+            if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
+                self.shoot_boomerang_bullet()
+            if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
+                self.shoot_split_bullet()
+            # (Movement + collision handling) -- original body continues below unchanged
+        except Exception as e:
+            if self.debug:
+                print("[update_game] Exception:", e)
+            self.log_error(e)
+        finally:
+            # Continue loop even if exception to avoid freezing
+            self._update_lore_label()
+            if not self.game_over:
+                self.root.after(50, self.update_game)
         # Move triangle bullets
         triangle_speed = 7
 
@@ -1465,25 +1482,7 @@ class bullet_hell_game:
                 self.grazed_bullets.add(boss_bullet)
                 self.show_graze_effect()
 
-        # Move quad bullets
-        for bullet in self.bullets[:]:
-            self.canvas.move(bullet, 0, quad_speed)
-            if self.check_collision(bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-            elif self.canvas.coords(bullet)[1] > self.height:
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-                self.score += 2
-            # Grazing check
-            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bullet)
-                self.show_graze_effect()
+    # (Removed duplicate quad bullet move block to prevent double-processing vertical bullets)
 
         # Move zigzag bullets
         for bullet_tuple in self.zigzag_bullets[:]:
@@ -1809,7 +1808,12 @@ class bullet_hell_game:
 
     def check_collision(self, bullet):
         bullet_coords = self.canvas.coords(bullet)
+        # If item was deleted or coords incomplete, treat as non-collision
+        if len(bullet_coords) < 4:
+            return False
         player_coords = self.canvas.coords(self.player)
+        if len(player_coords) < 4:
+            return False
         return (bullet_coords[2] > player_coords[0] and
                 bullet_coords[0] < player_coords[2] and
                 bullet_coords[3] > player_coords[1] and
@@ -1828,7 +1832,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Get Shot at by a Nine Year Old Simulator")
     parser.add_argument('--lore-tone', choices=['horror','surreal','blended'], help='Lore flavor tone override')
     parser.add_argument('--bg-interval', type=float, default=6, help='Seconds between background color shifts')
+    parser.add_argument('--debug', action='store_true', help='Enable verbose debug & error logging')
     args = parser.parse_args()
     root = tk.Tk()
-    game = bullet_hell_game(root, bg_color_interval=args.bg_interval, lore_tone=args.lore_tone)
+    game = bullet_hell_game(root, bg_color_interval=args.bg_interval, lore_tone=args.lore_tone, debug=args.debug)
     root.mainloop()
