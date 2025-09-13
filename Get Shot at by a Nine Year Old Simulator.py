@@ -1821,9 +1821,144 @@ class bullet_hell_game:
                 "Finalizer prepared but object refuses scope end."
             ]
         }
-        self.lore_cycle_index = 0
-        # Ephemeral mid-screen lore overlay items (each: {'ids': [...], 'life': frames})
-        self._mid_lore_items = []
+        # Normalize capitalization for lore: convert whole-word 'you'/'your' to uppercase
+        try:
+            import re
+            for _k, _list in self.lore_fragments.items():
+                for _i, _line in enumerate(_list):
+                    _list[_i] = re.sub(r"\b(you|your)\b", lambda m: m.group(0).upper(), _line, flags=re.IGNORECASE)
+        except Exception:
+            pass
+        # --- Additional lore expansion (append-only, safe merge) ---
+        try:
+            _extra_lore = {
+                'warden': [
+                    "The Warden Process only speaks in diffs.",
+                    "Your latency is being graphed for sentencing.",
+                    "J waves at something scheduling your audit.",
+                    "A lock icon flickers where sky should render.",
+                    "Permissions escalate when you hesitate.",
+                    "Warden heartbeat packet skipped an interval.",
+                    "Silent rollback threatened, then deferred.",
+                    "A seal script: DO NOT COMMIT THIS EXISTENCE"
+                ],
+                'timeline': [
+                    "Branch names drift by: childhood-refactor, hope-hotfix.",
+                    "A merge conflict crackles over your heartbeat.",
+                    "Detached HEAD state: you.",
+                    "Rebase attempt aborted: J modified history live.",
+                    "Stashed summers spill into the present floor.",
+                    "Cherry-picked emotions misalign their indices.",
+                    "Tag v0-child dissolves behind you.",
+                    "Upstream reality force-pushed without warning."
+                ],
+                'entropy': [
+                    "Heat death sends a postcard: 'soon-ish'.",
+                    "Order leaks through microscopic UI seams.",
+                    "Bullets cool into conceptual gravel.",
+                    "Friction between would-have-beens ionizes air.",
+                    "Entropy invoices you for borrowed clarity.",
+                    "Structure decays into soft procedural fog.",
+                    "A sigh crystallizes, then sublimes.",
+                    "Clock noise upscales into thunder."
+                ],
+                'song': [
+                    "J hums a melody with missing timestamps.",
+                    "Bridge repeats until the universe nods.",
+                    "Chorus resamples itself for better nostalgia.",
+                    "Drum pattern quantized to a broken calendar.",
+                    "A key change tries to grow into an ending.",
+                    "Silence is just preloaded harmony.",
+                    "Lyrics redacted pending emotional clearance.",
+                    "Tempo automation scribbled in crayon."
+                ],
+                'anomaly': [
+                    "You register as TYPE: UNDOCUMENTED INPUT.",
+                    "Spectators annotate you in invisible ink.",
+                    "Checksum mismatch flagged but celebrated.",
+                    "You cast a shadow shaped like a patch file.",
+                    "Prediction model shrugs at your velocity.",
+                    "Out-of-distribution heartbeat detected.",
+                    "Fallback heuristics argue about your genre.",
+                    "You feel optional but required."
+                ],
+                'mirror': [
+                    "Reflections buffer, then choose a protagonist.",
+                    "Your inverse smiles first.",
+                    "A mirror angles itself to dodge continuity.",
+                    "Specular highlights whisper alt-lore.",
+                    "Surface tension decides you are admissible.",
+                    "Mirrored J looks briefly older.",
+                    "Refraction index tied to unresolved guilt.",
+                    "Reflection budget nearly exhausted."
+                ],
+                'redacted': [
+                    "[REDACTED] tried to warn you about [REDACTED].",
+                    "File 0x3A???: CONTENT SUPPRESSED FOR COMFORT.",
+                    "Statement removed at request of oversight daemon.",
+                    "Context withheld: pending ethics compile.",
+                    "Line 42 intentionally blank (ritual space).",
+                    "Spoiler filtration jitter detected.",
+                    "Narrative patch quarantined for review.",
+                    "This fragment self-scans for leaks."
+                ],
+                'parent': [
+                    "A lullaby fractures across incompatible eras.",
+                    "Someone calls J for dinner a decade away.",
+                    "Parental concern reduced to a looping ping.",
+                    "A fridge drawing persists after the fridge.",
+                    "Permission slip for EXISTING unsigned.",
+                    "A bedtime story compiles with 7 warnings.",
+                    "Voiceprint cached then orphaned.",
+                    "Handshake failed: SOURCE_GUARDIAN_NOT_FOUND"
+                ],
+                'threshold': [
+                    "There is a door made of frame drops.",
+                    "Crossing requires exact nostalgic pressure.",
+                    "Border patrol: three drifting semicolons.",
+                    "A loading bar measures collective doubt.",
+                    "Gate glyphs spell 'maybe later'.",
+                    "You approach; uptime statistics tense.",
+                    "Checkpoint requests authentication by memory.",
+                    "Doorway logs: entrant ambiguous but permitted."
+                ],
+                'exit': [
+                    "Alt+F4 listed under mythological endings.",
+                    "Quit button grayed: narrative still hydrating.",
+                    "Escape key intercepted by custody process.",
+                    "A rumor: true ending requires forgiving lag.",
+                    "Shutdown sequence rehearses silently.",
+                    "Window close event postponed for pathos.",
+                    "X icon becomes an eye then pretends otherwise.",
+                    "Exit hint hidden inside an unused sprite."
+                ],
+                'ritual': [
+                    "You performed a dodge pattern older than fire.",
+                    "Three perfect frames = accidental invocation.",
+                    "Bullets align into a briefly sacred lattice.",
+                    "Graze ring hums a chord of offering.",
+                    "Controller haptic ghost counts cadence.",
+                    "Missed input accepted as symbolic abstention.",
+                    "A particle effect kneels and dissipates.",
+                    "You unlock nothing but the gesture itself."
+                ]
+            }
+            # Merge without overwriting existing keys; extend lists if key already exists.
+            for _k,_v in _extra_lore.items():
+                if _k in self.lore_fragments:
+                    try:
+                        # avoid duplicates: only append lines not already present
+                        existing = set(self.lore_fragments[_k])
+                        for line in _v:
+                            if line not in existing:
+                                self.lore_fragments[_k].append(line)
+                    except Exception:
+                        pass
+                else:
+                    self.lore_fragments[_k] = list(_v)
+        except Exception:
+            pass
+        # --- End additional lore expansion ---
 
     # --- Game Over Animation (particles + pulsing text) ---
     def start_game_over_animation(self):
