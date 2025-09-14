@@ -109,9 +109,11 @@ class bullet_hell_game:
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
-        # Practice mode (invincible)
+    # Practice mode (invincible)
         self.practice_mode = False
         self.practice_text = None
+    # Homing bullet tuning
+        self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
     # Player movement speed (keyboard only)
         self.player_speed = 15
     # (Removed joystick / Steam Input attributes)
@@ -471,6 +473,7 @@ class bullet_hell_game:
         self.wave_bullets = []
         self.boomerang_bullets = []
         self.split_bullets = []
+        self.homing_bullet_max_life = 180
         # Reset scores/timers
         self.score = 0
         self.timee = int(time.time())
@@ -652,7 +655,7 @@ class bullet_hell_game:
             x = random.randint(0, self.width-20)
             bullet = self.canvas.create_oval(x, 0, x + 16, 16, fill="#ffdd00")
             # Start with simple downward motion; vx adjusted over time
-            self.homing_bullets.append((bullet, 0.0, 4.0))
+            self.homing_bullets.append((bullet, 0.0, 4.0, self.homing_bullet_max_life))  # (id,vx,vy,life)
 
     def shoot_spiral_bullet(self):
         """Spawn a bullet that spirals outward from a point (random near center)."""
@@ -1457,7 +1460,12 @@ class bullet_hell_game:
 
         # ---------------- Move homing bullets ----------------
         for hb_tuple in self.homing_bullets[:]:
-            bullet, vx, vy = hb_tuple
+            # Backward compatibility: allow old 3-tuple
+            if len(hb_tuple) == 3:
+                bullet, vx, vy = hb_tuple
+                life = self.homing_bullet_max_life
+            else:
+                bullet, vx, vy, life = hb_tuple
             # Compute vector toward player center
             px1, py1, px2, py2 = self.canvas.coords(self.player)
             pcx = (px1 + px2)/2
@@ -1476,9 +1484,10 @@ class bullet_hell_game:
             vx = vx * (1 - steer_factor) + target_vx * steer_factor
             vy = vy * (1 - steer_factor) + target_vy * steer_factor
             self.canvas.move(bullet, vx, vy)
-            # Update tuple
+            life -= 1
+            # Update tuple (store life)
             idx = self.homing_bullets.index(hb_tuple)
-            self.homing_bullets[idx] = (bullet, vx, vy)
+            self.homing_bullets[idx] = (bullet, vx, vy, life)
             # Collision / out of bounds
             if self.check_collision(bullet):
                 if not self.practice_mode:
@@ -1486,12 +1495,23 @@ class bullet_hell_game:
                     if self.lives <= 0:
                         self.end_game()
                 self.canvas.delete(bullet)
-                self.homing_bullets.remove((bullet, vx, vy))
+                self.homing_bullets.remove(self.homing_bullets[idx])
             else:
                 coords = self.canvas.coords(bullet)
-                if not coords or coords[1] > self.height or coords[0] < -40 or coords[2] > self.width + 40:
-                    self.canvas.delete(bullet)
-                    self.homing_bullets.remove((bullet, vx, vy))
+                if (not coords or coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0):
+                    try:
+                        self.canvas.delete(bullet)
+                    except Exception:
+                        pass
+                    # Remove using safe search if idx stale
+                    try:
+                        self.homing_bullets.remove(self.homing_bullets[idx])
+                    except Exception:
+                        # fallback linear remove by id match
+                        for _t in self.homing_bullets:
+                            if _t[0] == bullet:
+                                self.homing_bullets.remove(_t)
+                                break
                     self.score += 3
             if bullet not in self.grazed_bullets and self.check_graze(bullet):
                 self.score += 1
