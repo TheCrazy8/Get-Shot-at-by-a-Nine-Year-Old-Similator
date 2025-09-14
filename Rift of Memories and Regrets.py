@@ -157,14 +157,13 @@ class bullet_hell_game:
             "ERROR 404: FILE \"YOU.EXE\" NOT FOUND",
             "An eternal silence washes over all",
             "YOU hope that maybe J made it out...  On second thought, maybe YOU don't...",
-            "There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n  There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape. \n There is no escape.  There is no escape.  There is no escape.",
             "\"Thanks! :3\"",
             "YOU think to YOURself \"so this is what the recycle bin is like...\"",
             "YOU'll never find out whether this was digital, dream, delusion, or definite",
             "Maybe...",
             "Game over.txt does not exist.  Pllease specify another file.",
             "YOUR reflection melts.  YOU melts.  YOU melt.",
-            "YOU can't feel YOUR YOkjdfU",
+            "YOU can't feel YOUR YOU",
             "YOU try to scream but nothing comes out.  YOU have no mouth.",
             "At least it's over.",
             "Was it really worth it?",
@@ -724,6 +723,56 @@ class bullet_hell_game:
             y_velocity = speed * math.sin(angle)
             # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
             self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
+
+    def shoot_ring_burst(self):
+        """Spawn a circular ring of bullets that fly outward."""
+        if self.game_over:
+            return
+        cx = random.randint(self.width//4, self.width*3//4)
+        cy = random.randint(100, self.height//2)
+        count = 12
+        speed = 4 + self.difficulty/6
+        radius = 24
+        for i in range(count):
+            ang = (2*math.pi / count) * i
+            bx = cx + math.cos(ang)*radius
+            by = cy + math.sin(ang)*radius
+            bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#55ffdd", outline="#ffffff")
+            vx = math.cos(ang) * speed
+            vy = math.sin(ang) * speed
+            self.ring_bullets.append((bullet, vx, vy))
+
+    def shoot_fan_burst(self):
+        """Spawn a fan spread of bullets aimed roughly at player with angular spread."""
+        if self.game_over:
+            return
+        # Origin near top center-ish
+        base_x = random.randint(self.width//3, self.width*2//3)
+        base_y = 40
+        px1, py1, px2, py2 = self.canvas.coords(self.player)
+        pcx = (px1 + px2)/2
+        pcy = (py1 + py2)/2
+        dx = pcx - base_x
+        dy = pcy - base_y
+        base_ang = math.atan2(dy, dx)
+        spread = math.radians(50)  # total spread angle
+        bullets_in_fan = 7
+        speed = 7 + self.difficulty/8
+        for i in range(bullets_in_fan):
+            frac = 0 if bullets_in_fan == 1 else i/(bullets_in_fan-1)
+            ang = base_ang - spread/2 + spread * frac
+            vx = math.cos(ang) * speed
+            vy = math.sin(ang) * speed
+            bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffcc55", outline="#ffffff")
+            self.fan_bullets.append((bullet, vx, vy))
+        # Slight random extra bullet occasionally for variation
+        if random.random() < 0.25:
+            ang = base_ang + random.uniform(-spread/2, spread/2)
+            vx = math.cos(ang) * (speed+1)
+            vy = math.sin(ang) * (speed+1)
+            bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffaa33", outline="#ffffff")
+            self.fan_bullets.append((bullet, vx, vy))
+
 
     def move_player(self, event):
         if self.paused or self.game_over:
