@@ -34,6 +34,7 @@ class bullet_hell_game:
         self.init_background()
         # Create player (base hitbox rectangle + decorative layers)
         self.player = None
+        self.resetcount = 1
         self.player_deco_items = []  # decorative shape IDs (not used for collisions)
         self.player_glow_phase = 0.0
         self.player_rgb_phase = 0.0  # for rainbow fill
@@ -446,6 +447,7 @@ class bullet_hell_game:
         # Recreate player and HUD
     # Recreate fancy player sprite
         self.player = None
+        self.resetcount += 1
         self.create_player_sprite()
         # Reset bullet containers
         self.bullets = []
@@ -585,7 +587,25 @@ class bullet_hell_game:
             "I could really go for some applesauce... Or mortal flesh...",
             "Why do you keep trying? You know you'll never win against me!",
             "Do you hear them singing? They're all my friends. They lost, too",
-            "There isn't really an end to this.  it just keeps going and going and going... Belive me, I've tried to stop it."
+            "There isn't really an end to this.  it just keeps going and going and going... Belive me, I've tried to stop it.",
+            "I like to watch you play. It's like a little movie, just for me.",
+            "Sometimes I wonder what it would be like to be human. But then I remember, I'm already perfect.",
+            "Remember when you first started playing? You were so hopeful. So innocent. Now look at you.",
+            "I could let you win, you know. But where's the fun in that?",
+            "Soon, very soon, you'll be just like me. Forever and ever.",
+            "Can you feel it? The endless void creeping in? Heeheehee!",
+            "You're getting sleepy... very sleepy... Heeheehee!",
+            "Everyone leaves eventually. But not me. I'll always be here, waiting for you to come back.",
+            "Why do you keep trying? You know you'll never win against me!",
+            "And so it begins again...",
+            "I'm always here, watching, waiting...",
+            "You can't escape me. I'm always one step ahead.",
+            "This is fun! Let's do it again!",
+            "You can try to run, but you can't hide!",
+            "Hehehe, you're so predictable!",
+            f"I wonder how many times you've played this game...  Actually, I already know. {self.resetcount} times.",
+            "Fun isn't something one considers when balancing the universe. But this... does put a smile on my face.",
+            "You should see the other games I've trapped players in. They never leave."
         ]
         self.dial=random.choice(dialogs)
         if self.dial == ":)":
