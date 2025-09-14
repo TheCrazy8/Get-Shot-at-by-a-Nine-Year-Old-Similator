@@ -116,7 +116,6 @@ class bullet_hell_game:
         self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
     # Player movement speed (keyboard only)
         self.player_speed = 15
-    # (Removed joystick / Steam Input attributes)
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = {
@@ -176,8 +175,6 @@ class bullet_hell_game:
         ]
         self.selected_game_over_message = None
         self.update_game()
-
-    # (Controller support removed)
 
     def apply_player_move(self, dx, dy):
         if self.paused or self.game_over:
