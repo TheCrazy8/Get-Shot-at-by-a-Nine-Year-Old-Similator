@@ -7,6 +7,14 @@ import os
 import math
 # (Steam / gamepad support removed)
 
+# Local math aliases for micro-optimizations (faster local lookups in tight loops)
+_sin = math.sin
+_cos = math.cos
+_hypot = math.hypot
+_atan2 = math.atan2
+_pi = math.pi
+_tau = getattr(math, 'tau', 2 * math.pi)
+
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
@@ -250,7 +258,7 @@ class bullet_hell_game:
         self.player_rgb_phase += 0.02
         diamond, inner, glow = self.player_deco_items
         # Pulsing glow color
-        pulse = (math.sin(self.player_glow_phase) + 1)/2  # 0..1
+        pulse = (_sin(self.player_glow_phase) + 1)/2  # 0..1
         # Interpolate between two colors for diamond and inner
         def lerp_color(c1, c2, t):
             return tuple(int(c1[i] + (c2[i]-c1[i])*t) for i in range(3))
@@ -261,7 +269,7 @@ class bullet_hell_game:
         self.canvas.itemconfig(inner, outline=f"#{i_col[0]:02x}{i_col[1]:02x}{i_col[2]:02x}")
         self.canvas.itemconfig(glow, outline=f"#{g_col[0]:02x}{g_col[1]:02x}{g_col[2]:02x}")
         # Slight rotation illusion: scale diamond size subtly
-        scale_factor = 1 + 0.05*math.sin(self.player_glow_phase*0.7)
+        scale_factor = 1 + 0.05*_sin(self.player_glow_phase*0.7)
         x1, y1, x2, y2 = self.canvas.coords(self.player)
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
@@ -388,7 +396,7 @@ class bullet_hell_game:
             return tuple(int(a[i] + (b[i]-a[i])*t) for i in range(3))
         # Glow/pulse factor for line brightness
         self.grid_glow_cycle += 0.05
-        glow = (math.sin(self.grid_glow_cycle) + 1)/2  # 0..1
+        glow = (_sin(self.grid_glow_cycle) + 1)/2  # 0..1
         # Update horizontal lines to scroll downward; wrap to top with new perspective
         new_h_lines = []
         for line_id, t in self.grid_h_lines:
@@ -637,8 +645,8 @@ class bullet_hell_game:
             for i in range(10):
                 angle = -math.pi/2 + i * math.pi/5  # start pointing up
                 r = outer_r if i % 2 == 0 else inner_r
-                px = cx + r * math.cos(angle)
-                py = cy + r * math.sin(angle)
+                px = cx + r * _cos(angle)
+                py = cy + r * _sin(angle)
                 pts.extend([px, py])
             bullet = self.canvas.create_polygon(pts, fill="magenta", outline="white", width=2)
             self.star_bullets.append(bullet)
@@ -692,8 +700,8 @@ class bullet_hell_game:
             base_speed = 3.5 + self.difficulty/5
             for i in range(count):
                 ang = (2*math.pi / count) * i + random.uniform(-0.1, 0.1)
-                vx = math.cos(ang) * base_speed
-                vy = math.sin(ang) * base_speed
+                vx = _cos(ang) * base_speed
+                vy = _sin(ang) * base_speed
                 bullet = self.canvas.create_oval(cx-8, cy-8, cx+8, cy+8, fill="#ff00ff")
                 self.radial_bullets.append((bullet, vx, vy))
 
@@ -737,8 +745,8 @@ class bullet_hell_game:
             # Random angle in radians
             angle = random.uniform(0, 2 * 3.14159)
             speed = 7 + self.difficulty // 2
-            x_velocity = speed * math.cos(angle)
-            y_velocity = speed * math.sin(angle)
+            x_velocity = speed * _cos(angle)
+            y_velocity = speed * _sin(angle)
             # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
             self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
 
@@ -753,11 +761,11 @@ class bullet_hell_game:
         radius = 24
         for i in range(count):
             ang = (2*math.pi / count) * i
-            bx = cx + math.cos(ang)*radius
-            by = cy + math.sin(ang)*radius
+            bx = cx + _cos(ang)*radius
+            by = cy + _sin(ang)*radius
             bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#55ffdd", outline="#ffffff")
-            vx = math.cos(ang) * speed
-            vy = math.sin(ang) * speed
+            vx = _cos(ang) * speed
+            vy = _sin(ang) * speed
             self.ring_bullets.append((bullet, vx, vy))
 
     def shoot_fan_burst(self):
@@ -779,15 +787,15 @@ class bullet_hell_game:
         for i in range(bullets_in_fan):
             frac = 0 if bullets_in_fan == 1 else i/(bullets_in_fan-1)
             ang = base_ang - spread/2 + spread * frac
-            vx = math.cos(ang) * speed
-            vy = math.sin(ang) * speed
+            vx = _cos(ang) * speed
+            vy = _sin(ang) * speed
             bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffcc55", outline="#ffffff")
             self.fan_bullets.append((bullet, vx, vy))
         # Slight random extra bullet occasionally for variation
         if random.random() < 0.25:
             ang = base_ang + random.uniform(-spread/2, spread/2)
-            vx = math.cos(ang) * (speed+1)
-            vy = math.sin(ang) * (speed+1)
+            vx = _cos(ang) * (speed+1)
+            vy = _sin(ang) * (speed+1)
             bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffaa33", outline="#ffffff")
             self.fan_bullets.append((bullet, vx, vy))
 
@@ -1421,8 +1429,8 @@ class bullet_hell_game:
                 cx = sum(xs)/len(xs)
                 cy = sum(ys)/len(ys)
                 angle = 0.18  # radians per frame
-                sin_a = math.sin(angle)
-                cos_a = math.cos(angle)
+                sin_a = _sin(angle)
+                cos_a = _cos(angle)
                 new_pts = []
                 for x, y in zip(xs, ys):
                     dx = x - cx
@@ -1491,7 +1499,7 @@ class bullet_hell_game:
             dx = pcx - bcx
             dy = pcy - bcy
            
-            dist = math.hypot(dx, dy) or 1
+            dist = _hypot(dx, dy) or 1
             # Normalize and apply steering (lerp velocities)
             target_vx = dx / dist * homing_speed
             target_vy = dy / dist * homing_speed
@@ -1538,8 +1546,8 @@ class bullet_hell_game:
             bullet, angle, radius, ang_speed, rad_speed, cx, cy = sp_tuple
             angle += ang_speed
             radius += rad_speed
-            x = cx + math.cos(angle) * radius
-            y = cy + math.sin(angle) * radius
+            x = cx + _cos(angle) * radius
+            y = cy + _sin(angle) * radius
             size = 20
             self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
             # Collision & removal
@@ -1599,7 +1607,7 @@ class bullet_hell_game:
             # Recompute center after vertical move
             bx1, by1, bx2, by2 = self.canvas.coords(bullet)
             cy = (by1 + by2)/2
-            cx = base_x + math.sin(phase) * amp
+            cx = base_x + _sin(phase) * amp
             size = bx2 - bx1
             self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+height/2)
             if self.check_collision(bullet):
@@ -1667,8 +1675,8 @@ class bullet_hell_game:
                 frag_speed = 4 + self.difficulty/5
                 for i in range(frag_count):
                     ang = (2*math.pi/frag_count)*i
-                    vx = math.cos(ang) * frag_speed
-                    vy2 = math.sin(ang) * frag_speed
+                    vx = _cos(ang) * frag_speed
+                    vy2 = _sin(ang) * frag_speed
                     frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
                     self.radial_bullets.append((frag, vx, vy2))
                 self.canvas.delete(bullet)
@@ -1864,8 +1872,8 @@ class bullet_hell_game:
         for i in range(60):
             ang = random.uniform(0, 2*math.pi)
             spd = random.uniform(2.5, 7.0)
-            vx = math.cos(ang)*spd
-            vy = math.sin(ang)*spd
+            vx = _cos(ang)*spd
+            vy = _sin(ang)*spd
             size = random.randint(4,10)
             pid = self.canvas.create_oval(cx-size//2, cy-size//2, cx+size//2, cy+size//2, fill="#ff55ff", outline="")
             # life frames ~ fade duration
@@ -1963,7 +1971,7 @@ class bullet_hell_game:
                     pass
         # Pulse text color / scale
         if self.go_anim_text is not None:
-            phase = math.sin(self.go_anim_frame * 0.18) * 0.5 + 0.5  # 0..1
+            phase = _sin(self.go_anim_frame * 0.18) * 0.5 + 0.5  # 0..1
             # Interpolate color between magenta and white
             def mix(a,b,t):
                 return int(a + (b-a)*t)
