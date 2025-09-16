@@ -70,6 +70,15 @@ class bullet_hell_game:
         self.exploded_fragments = []  # transitional (some fragment logic still custom)
         self.laser_indicators = []  # [(indicator_id, y, timer)]
         self.lasers = []  # [(laser_id, y, timer)]
+        # Legacy list placeholders retained for any remaining calls not yet ported
+        self.triangle_bullets = []
+        self.homing_bullets = []
+        self.spiral_bullets = []
+        self.radial_bullets = []
+        self.wave_bullets = []
+        self.boomerang_bullets = []
+        self.split_bullets = []
+        self.bouncing_bullets = []
         # New bullet type state containers
         # (old specialized lists removed; now tracked via active_bullets/state)
         self.score = 0
@@ -508,6 +517,39 @@ class bullet_hell_game:
                 bullets.append(Bullet(bid,cx,cy,vx,vy,spec))
             return bullets
 
+        def spawn_ring(game):
+            cx = game.width/2
+            cy = game.height/2
+            spec = game.bullet_specs['ring']
+            count = 16
+            base = spec.speed
+            bullets=[]
+            for i in range(count):
+                ang = (2*math.pi/count)*i
+                vx = math.cos(ang)*base
+                vy = math.sin(ang)*base
+                bid = game.canvas.create_oval(cx-6,cy-6,cx+6,cy+6, fill="orange")
+                bullets.append(Bullet(bid,cx,cy,vx,vy,spec))
+            return bullets
+
+        def spawn_fan(game):
+            cx = game.width/2
+            cy = game.height/3
+            spec = game.bullet_specs['fan']
+            count = 9
+            base = spec.speed
+            start = -math.pi/4
+            end = math.pi/4
+            bullets=[]
+            for i in range(count):
+                t = i/(count-1) if count>1 else 0.5
+                ang = start + (end-start)*t
+                vx = math.cos(ang)*base
+                vy = math.sin(ang)*base
+                bid = game.canvas.create_oval(cx-6,cy-6,cx+6,cy+6, fill="gold")
+                bullets.append(Bullet(bid,cx,cy,vx,vy,spec))
+            return bullets
+
         def spawn_wave(game):
             x = random.randint(40, game.width-40)
             size=18
@@ -557,6 +599,8 @@ class bullet_hell_game:
         reg(BulletSpec('wave', 100, 2, 1, self.unlock_times['wave'], 0.125, move_wave, spawn_wave))
         reg(BulletSpec('boomerang', 160, 3, 1, self.unlock_times['boomerang'], 0.118, move_boomerang, spawn_boomerang))
         reg(BulletSpec('split', 100, 2, 1, self.unlock_times['split'], 0.111, move_split, spawn_split))
+        reg(BulletSpec('ring', 140, 2, 1, 12, 0.20, move_radial, spawn_ring))
+        reg(BulletSpec('fan', 140, 2, 1, 18, 0.18, move_radial, spawn_fan))
 
         for k in self.bullet_specs:
             self.spawn_accumulators[k] = 0.0
@@ -1132,54 +1176,6 @@ class bullet_hell_game:
             # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
             self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
 
-    def shoot_ring_burst(self):
-        """Spawn a circular ring of bullets that fly outward."""
-        if self.game_over:
-            return
-        cx = random.randint(self.width//4, self.width*3//4)
-        cy = random.randint(100, self.height//2)
-        count = 12
-        speed = 4 + self.difficulty/6
-        radius = 24
-        for i in range(count):
-            ang = (2*math.pi / count) * i
-            bx = cx + math.cos(ang)*radius
-            by = cy + math.sin(ang)*radius
-            bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#55ffdd", outline="#ffffff")
-            vx = math.cos(ang) * speed
-            vy = math.sin(ang) * speed
-            self.ring_bullets.append((bullet, vx, vy))
-
-    def shoot_fan_burst(self):
-        """Spawn a fan spread of bullets aimed roughly at player with angular spread."""
-        if self.game_over:
-            return
-        # Origin near top center-ish
-        base_x = random.randint(self.width//3, self.width*2//3)
-        base_y = 40
-        px1, py1, px2, py2 = self.canvas.coords(self.player)
-        pcx = (px1 + px2)/2
-        pcy = (py1 + py2)/2
-        dx = pcx - base_x
-        dy = pcy - base_y
-        base_ang = math.atan2(dy, dx)
-        spread = math.radians(50)  # total spread angle
-        bullets_in_fan = 7
-        speed = 7 + self.difficulty/8
-        for i in range(bullets_in_fan):
-            frac = 0 if bullets_in_fan == 1 else i/(bullets_in_fan-1)
-            ang = base_ang - spread/2 + spread * frac
-            vx = math.cos(ang) * speed
-            vy = math.sin(ang) * speed
-            bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffcc55", outline="#ffffff")
-            self.fan_bullets.append((bullet, vx, vy))
-        # Slight random extra bullet occasionally for variation
-        if random.random() < 0.25:
-            ang = base_ang + random.uniform(-spread/2, spread/2)
-            vx = math.cos(ang) * (speed+1)
-            vy = math.sin(ang) * (speed+1)
-            bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffaa33", outline="#ffffff")
-            self.fan_bullets.append((bullet, vx, vy))
 
 
     def move_player(self, event):
@@ -1221,11 +1217,6 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
             self.bullets.append(bullet)
 
-    def shoot_egg_bullet(self):
-        if not self.game_over:
-            x = random.randint(0, self.width-20)
-            bullet = self.canvas.create_oval(x, 0, x + 20, 40, fill="tan")
-            self.egg_bullets.append(bullet)
 
     def shoot_bullet2(self):
         if not self.game_over:
@@ -1233,18 +1224,6 @@ class bullet_hell_game:
             bullet2 = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
             self.bullets2.append(bullet2)
 
-    def shoot_diag_bullet(self):
-        if not self.game_over:
-            x = random.randint(0, self.width-20)
-            direction = random.choice([1, -1])  # 1 for right-down, -1 for left-down
-            dbullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
-            self.diag_bullets.append((dbullet, direction))
-
-    def shoot_boss_bullet(self):
-        if not self.game_over:
-            x = random.randint(self.width//4, self.width*3//4)
-            bullet = self.canvas.create_oval(x, 0, x + 40, 40, fill="purple")
-            self.boss_bullets.append(bullet)
 
     def show_graze_effect(self):
         # Remove previous effect if present
@@ -1631,66 +1610,6 @@ class bullet_hell_game:
                 self.grazed_bullets.add(bullet2)
                 self.show_graze_effect()
 
-        # Move egg bullets
-        for egg_bullet in self.egg_bullets[:]:
-            self.canvas.move(egg_bullet, 0, egg_speed)
-            if self.check_collision(egg_bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(egg_bullet)
-                self.egg_bullets.remove(egg_bullet)
-            elif self.canvas.coords(egg_bullet)[1] > self.height:
-                self.canvas.delete(egg_bullet)
-                self.egg_bullets.remove(egg_bullet)
-                self.award_score(2)
-            # Grazing check
-            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
-                self.award_score(1)
-                self.grazed_bullets.add(egg_bullet)
-                self.show_graze_effect()
-
-        # Move diagonal bullets
-        for bullet_tuple in self.diag_bullets[:]:
-            dbullet, direction = bullet_tuple
-            self.canvas.move(dbullet, diag_speed * direction, diag_speed)
-            if self.check_collision(dbullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(dbullet)
-                self.diag_bullets.remove(bullet_tuple)
-            elif self.canvas.coords(dbullet)[1] > self.height:
-                self.canvas.delete(dbullet)
-                self.diag_bullets.remove(bullet_tuple)
-                self.award_score(2)
-            # Grazing check
-            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
-                self.award_score(1)
-                self.grazed_bullets.add(dbullet)
-                self.show_graze_effect()
-
-        # Move boss bullets
-        for boss_bullet in self.boss_bullets[:]:
-            self.canvas.move(boss_bullet, 0, boss_speed)
-            if self.check_collision(boss_bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(boss_bullet)
-                self.boss_bullets.remove(boss_bullet)
-            elif self.canvas.coords(boss_bullet)[1] > self.height:
-                self.canvas.delete(boss_bullet)
-                self.boss_bullets.remove(boss_bullet)
-                self.award_score(5)  # Boss bullets give more score
-            # Grazing check
-            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
-                self.award_score(2)
-                self.grazed_bullets.add(boss_bullet)
-                self.show_graze_effect()
 
         # Move quad bullets
         for bullet in self.quad_bullets[:]:
