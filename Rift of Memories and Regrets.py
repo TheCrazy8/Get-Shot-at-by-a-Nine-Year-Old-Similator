@@ -534,13 +534,13 @@ class bullet_hell_game:
         self.update_game()
 
     def shoot_quad_bullet(self):
-        if not self.game_over:
-            x = random.randint(0, self.width-20)
-            bullet1 = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
-            bullet2 = self.canvas.create_oval(x + 30, 0, x + 50, 20, fill="red")
-            bullet3 = self.canvas.create_oval(x + 60, 0, x + 80, 20, fill="red")
-            bullet4 = self.canvas.create_oval(x + 90, 0, x + 110, 20, fill="red")
-            self.bullets.extend([bullet1, bullet2, bullet3, bullet4])
+        if self.game_over: return
+        x = random.randint(0, self.width-110)
+        new_ids = []
+        for offset in (0,30,60,90):
+            bid = self.canvas.create_oval(x+offset, 0, x+offset+20, 20, fill="red")
+            new_ids.append(bid)
+        self.quad_bullets.extend(new_ids)
 
     def shoot_triangle_bullet(self):
         if not self.game_over:
@@ -1339,7 +1339,7 @@ class bullet_hell_game:
                 self.show_graze_effect()
 
         # Move quad bullets
-        for bullet in self.bullets[:]:
+        for bullet in self.quad_bullets[:]:
             self.canvas.move(bullet, 0, quad_speed)
             if self.check_collision(bullet):
                 if not self.practice_mode:
@@ -1347,10 +1347,10 @@ class bullet_hell_game:
                     if self.lives <= 0:
                         self.end_game()
                 self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
+                self.quad_bullets.remove(bullet)
             elif self.canvas.coords(bullet)[1] > self.height:
                 self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
+                self.quad_bullets.remove(bullet)
                 self.score += 2
             # Grazing check
             if self.check_graze(bullet) and bullet not in self.grazed_bullets:
