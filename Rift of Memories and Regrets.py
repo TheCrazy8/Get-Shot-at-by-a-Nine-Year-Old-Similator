@@ -7,6 +7,97 @@ import os
 import math
 # (Steam / gamepad support removed)
 
+# --- Lightweight object pooling to reduce Canvas create/delete churn for simple bullets ---
+class BulletPool:
+    """Generalized object pool for Canvas primitives used as bullets.
+    Supports: oval, rect, polygon (by point count), line (for lasers/indicators).
+    Matching criteria kept intentionally simple to avoid overhead: (kind, size signature).
+    For polygons we key by (kind, n_points, approx_w, approx_h, outline_width_flag).
+    """
+    def __init__(self, canvas, max_per_key=256):
+        self.canvas = canvas
+        self.max_per_key = max_per_key
+        # dict: key -> list[item_id]
+        self.free = {}
+
+    def _make_key(self, kind, w, h, extra=None):
+        # Normalize sizes to int to reduce key explosion
+        iw = int(round(w)) if w is not None else 0
+        ih = int(round(h)) if h is not None else 0
+        return (kind, iw, ih, extra)
+
+    def acquire_oval(self, x, y, w, h, fill, outline="", width=0):
+        key = self._make_key('oval', w, h, width)
+        lst = self.free.get(key)
+        if lst:
+            bid = lst.pop()
+            try:
+                self.canvas.coords(bid, x, y, x+w, y+h)
+                self.canvas.itemconfig(bid, fill=fill, outline=outline, width=width, state='normal')
+            except Exception:
+                pass
+            return bid
+        return self.canvas.create_oval(x, y, x+w, y+h, fill=fill, outline=outline, width=width)
+
+    def acquire_rect(self, x, y, w, h, fill, outline="", width=0):
+        key = self._make_key('rect', w, h, width)
+        lst = self.free.get(key)
+        if lst:
+            bid = lst.pop()
+            try:
+                self.canvas.coords(bid, x, y, x+w, y+h)
+                self.canvas.itemconfig(bid, fill=fill, outline=outline, width=width, state='normal')
+            except Exception:
+                pass
+            return bid
+        return self.canvas.create_rectangle(x, y, x+w, y+h, fill=fill, outline=outline, width=width)
+
+    def acquire_line(self, x1, y1, x2, y2, fill, width=1, dash=None):
+        key = ('line', int(width), 0, dash)
+        lst = self.free.get(key)
+        if lst:
+            bid = lst.pop()
+            try:
+                self.canvas.coords(bid, x1, y1, x2, y2)
+                self.canvas.itemconfig(bid, fill=fill, width=width, dash=dash, state='normal')
+            except Exception:
+                pass
+            return bid
+        return self.canvas.create_line(x1, y1, x2, y2, fill=fill, width=width, dash=dash)
+
+    def acquire_polygon(self, points, fill, outline="", width=0):
+        # Approximate bounding box
+        xs = points[0::2]
+        ys = points[1::2]
+        w = (max(xs)-min(xs)) if xs else 0
+        h = (max(ys)-min(ys)) if ys else 0
+        key = self._make_key(('poly', len(points)), w, h, width)
+        lst = self.free.get(key)
+        if lst:
+            bid = lst.pop()
+            try:
+                self.canvas.coords(bid, *points)
+                self.canvas.itemconfig(bid, fill=fill, outline=outline, width=width, state='normal')
+            except Exception:
+                pass
+            return bid
+        return self.canvas.create_polygon(points, fill=fill, outline=outline, width=width)
+
+    def recycle(self, bid, kind='oval', w=None, h=None, extra=None):
+        # Hide and store back if capacity not exceeded
+        key = self._make_key(kind, w or 0, h or 0, extra)
+        bucket = self.free.setdefault(key, [])
+        if len(bucket) >= self.max_per_key:
+            try: self.canvas.delete(bid)
+            except Exception: pass
+            return
+        try:
+            self.canvas.itemconfig(bid, state='hidden')
+        except Exception:
+            return
+        bucket.append(bid)
+
+
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
@@ -49,6 +140,7 @@ class bullet_hell_game:
         self.star_bullets = []
         self.rect_bullets = []
         self.egg_bullets = []
+        self.quad_bullets = []  # separated from generic bullets to avoid double movement
         self.exploding_bullets = []
         self.exploded_fragments = []  # [(bullet_id, dx, dy)]
         self.bouncing_bullets = []
@@ -62,6 +154,10 @@ class bullet_hell_game:
         self.wave_bullets = []        # [(bullet_id, base_x, phase, amp, vy, phase_speed)]
         self.boomerang_bullets = []   # [(bullet_id, vy, timer, state)] state: 'down'->'up'
         self.split_bullets = []       # [(bullet_id, timer)] splits into fragments after timer
+        self.ring_bullets = []        # [(bullet_id, vx, vy)] radial ring (spawn function exists)
+        self.fan_bullets = []         # [(bullet_id, vx, vy)] fan spread (spawn function exists)
+        # Generalized object pool for all bullet shapes
+        self.pool = BulletPool(self.canvas)
         self.score = 0
         self.timee = int(time.time())
         self.dial = "Hi-hi-hi! Wanna play with me? I promise it'll be fun!"
@@ -173,6 +269,43 @@ class bullet_hell_game:
             "YOUR soul was useful for something in the end...",
             "Useless files have been purged"
         ]
+        # Helper to recycle a bullet shape via pool with graceful fallback.
+        def _recycle_bullet_local(bid, kind_hint=None):
+            try:
+                if bid is None:
+                    return
+                if kind_hint is None:
+                    k = self.canvas.type(bid)
+                    if k == 'oval':
+                        kind_hint = 'oval'
+                    elif k == 'rectangle':
+                        kind_hint = 'rect'
+                    elif k == 'line':
+                        kind_hint = 'line'
+                    elif k == 'polygon':
+                        pts = self.canvas.coords(bid)
+                        kind_hint = ('poly', len(pts))
+                    else:
+                        self.canvas.delete(bid)
+                        return
+                if kind_hint in ('oval','rect'):
+                    x1,y1,x2,y2 = self.canvas.coords(bid)
+                    self.pool.recycle(bid, kind_hint, int(x2-x1), int(y2-y1))
+                elif kind_hint == 'line':
+                    try:
+                        w = int(float(self.canvas.itemcget(bid,'width')))
+                    except Exception:
+                        w = 1
+                    self.pool.recycle(bid, 'line', w, 0)
+                elif isinstance(kind_hint, tuple) and kind_hint and kind_hint[0] == 'poly':
+                    self.pool.recycle(bid, kind_hint, 0, 0)
+                else:
+                    self.canvas.delete(bid)
+            except Exception:
+                try: self.canvas.delete(bid)
+                except Exception: pass
+        # Bind as instance method alias for wider use later patches
+        self._recycle_bullet = _recycle_bullet_local
         self.selected_game_over_message = None
         self.update_game()
 
@@ -443,6 +576,8 @@ class bullet_hell_game:
             self.canvas.delete(item)
         # Recreate background grid before gameplay elements
         self.init_background()
+        # Reinitialize object pool to discard any hidden stale items
+        self.pool = BulletPool(self.canvas)
         # Recreate player and HUD
     # Recreate fancy player sprite
         self.player = None
@@ -536,11 +671,12 @@ class bullet_hell_game:
     def shoot_quad_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
-            bullet1 = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
-            bullet2 = self.canvas.create_oval(x + 30, 0, x + 50, 20, fill="red")
-            bullet3 = self.canvas.create_oval(x + 60, 0, x + 80, 20, fill="red")
-            bullet4 = self.canvas.create_oval(x + 90, 0, x + 110, 20, fill="red")
-            self.bullets.extend([bullet1, bullet2, bullet3, bullet4])
+            spacing = 30
+            size = 20
+            for i in range(4):
+                bx = x + i * spacing
+                bid = self.pool.acquire_oval(bx, 0, size, size, 'red')
+                self.quad_bullets.append(bid)
 
     def shoot_triangle_bullet(self):
         if not self.game_over:
@@ -646,8 +782,8 @@ class bullet_hell_game:
     def shoot_rect_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-60)
-            bullet = self.canvas.create_rectangle(x, 0, x+60, 15, fill="blue")
-            self.rect_bullets.append(bullet)
+            bid = self.pool.acquire_rect(x, 0, 60, 15, 'blue')
+            self.rect_bullets.append(bid)
 
     def shoot_zigzag_bullet(self):
         if not self.game_over:
@@ -660,8 +796,8 @@ class bullet_hell_game:
     def shoot_fast_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
-            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="orange")
-            self.fast_bullets.append(bullet)
+            bid = self.pool.acquire_oval(x, 0, 20, 20, 'orange')
+            self.fast_bullets.append(bid)
 
     # ---------------- New bullet spawners ----------------
     def shoot_homing_bullet(self):
@@ -828,20 +964,20 @@ class bullet_hell_game:
     def shoot_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
-            bullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="red")
-            self.bullets.append(bullet)
+            bid = self.pool.acquire_oval(x, 0, 20, 20, 'red')
+            self.bullets.append(bid)
 
     def shoot_egg_bullet(self):
         if not self.game_over:
             x = random.randint(0, self.width-20)
-            bullet = self.canvas.create_oval(x, 0, x + 20, 40, fill="tan")
-            self.egg_bullets.append(bullet)
+            bid = self.pool.acquire_oval(x, 0, 20, 40, 'tan')
+            self.egg_bullets.append(bid)
 
     def shoot_bullet2(self):
         if not self.game_over:
             y = random.randint(0, self.height-20)
-            bullet2 = self.canvas.create_oval(0, y, 20, y + 20, fill="yellow")
-            self.bullets2.append(bullet2)
+            bid = self.pool.acquire_oval(0, y, 20, 20, 'yellow')
+            self.bullets2.append(bid)
 
     def shoot_diag_bullet(self):
         if not self.game_over:
@@ -977,6 +1113,54 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        # Local helper to process simple downward (or horizontal) bullets with pooling reuse
+        def _process_linear(list_ref, dx, dy, score_on_exit, shape):
+            # iterate over copy
+            for bid in list_ref[:]:
+                try:
+                    self.canvas.move(bid, dx, dy)
+                except Exception:
+                    try: list_ref.remove(bid)
+                    except Exception: pass
+                    continue
+                if self.check_collision(bid):
+                    if not self.practice_mode:
+                        self.lives -= 1
+                        if self.lives <= 0:
+                            self.end_game()
+                    # recycle
+                    try:
+                        x1,y1,x2,y2 = self.canvas.coords(bid)
+                        self.pool.recycle(bid, shape, int(x2-x1), int(y2-y1))
+                    except Exception:
+                        try: self.canvas.delete(bid)
+                        except Exception: pass
+                    try: list_ref.remove(bid)
+                    except Exception: pass
+                    continue
+                # out of bounds vertical
+                try:
+                    x1,y1,x2,y2 = self.canvas.coords(bid)
+                except Exception:
+                    try: list_ref.remove(bid)
+                    except Exception: pass
+                    continue
+                off = (y1 > self.height) if dy>0 else (x1>self.width if dx>0 else False)
+                if off:
+                    try:
+                        self.pool.recycle(bid, shape, int(x2-x1), int(y2-y1))
+                    except Exception:
+                        try: self.canvas.delete(bid)
+                        except Exception: pass
+                    try: list_ref.remove(bid)
+                    except Exception: pass
+                    self.score += score_on_exit
+                    continue
+                # graze
+                if bid not in self.grazed_bullets and self.check_graze(bid):
+                    self.score += 1
+                    self.grazed_bullets.add(bid)
+                    self.show_graze_effect()
     # (Removed controller polling)
     # Background animation
         self.update_background()
@@ -1100,14 +1284,23 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                # recycle triangle polygon
+                try:
+                    pts = self.canvas.coords(bullet)
+                    self.pool.recycle(bullet, ('poly', len(pts)), None, None)
+                except Exception:
+                    self.canvas.delete(bullet)
                 self.paused = False
                 self.pause_text = None
                 self.triangle_bullets.remove(bullet_tuple)
             else:
                 coords = self.canvas.coords(bullet)
                 if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
-                    self.canvas.delete(bullet)
+                    try:
+                        pts = self.canvas.coords(bullet)
+                        self.pool.recycle(bullet, ('poly', len(pts)), None, None)
+                    except Exception:
+                        self.canvas.delete(bullet)
                     self.triangle_bullets.remove(bullet_tuple)
                     self.score += 2
         # Move bouncing bullets
@@ -1128,7 +1321,11 @@ class bullet_hell_game:
                 bounces_left -= 1
             # Remove bullet if out of bounces
             if bounces_left < 0:
-                self.canvas.delete(bullet)
+                try:
+                    x1,y1,x2,y2 = self.canvas.coords(bullet)
+                    self.pool.recycle(bullet,'oval',int(x2-x1),int(y2-y1))
+                except Exception:
+                    self.canvas.delete(bullet)
                 self.bouncing_bullets.remove(bullet_tuple)
                 self.score += 2
                 continue
@@ -1137,7 +1334,11 @@ class bullet_hell_game:
             self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
             if self.check_collision(bullet):
                 self.lives -= 1
-                self.canvas.delete(bullet)
+                try:
+                    x1,y1,x2,y2 = self.canvas.coords(bullet)
+                    self.pool.recycle(bullet,'oval',int(x2-x1),int(y2-y1))
+                except Exception:
+                    self.canvas.delete(bullet)
                 self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
                 if self.lives <= 0:
                     self.end_game()
@@ -1153,21 +1354,25 @@ class bullet_hell_game:
                 size = 12
                 directions = [(6, 6), (-6, 6), (6, -6), (-6, -6)]
                 for dx, dy in directions:
-                    frag = self.canvas.create_oval(bx-size//2, by-size//2, bx+size//2, by+size//2, fill="white")
+                    frag = self.pool.acquire_oval(bx-size//2, by-size//2, size, size, fill="white")
                     self.exploded_fragments.append((frag, dx, dy))
-                self.canvas.delete(bullet)
+                try:
+                    x1,y1,x2,y2 = self.canvas.coords(bullet)
+                    self.pool.recycle(bullet,'oval',int(x2-x1),int(y2-y1))
+                except Exception:
+                    self.canvas.delete(bullet)
                 self.exploding_bullets.remove(bullet)
                 self.score += 2
                 continue
             if self.check_collision(bullet):
                 self.lives -= 1
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.exploding_bullets.remove(bullet)
                 if self.lives <= 0:
                     self.end_game()
             else:
                 if coords and coords[1] > self.height:
-                    self.canvas.delete(bullet)
+                    self._recycle_bullet(bullet,'oval')
                     self.exploding_bullets.remove(bullet)
                     self.score += 2
         # Move exploded fragments (diagonal bullets)
@@ -1177,12 +1382,12 @@ class bullet_hell_game:
             coords = self.canvas.coords(frag)
             if self.check_collision(frag):
                 self.lives -= 1
-                self.canvas.delete(frag)
+                self._recycle_bullet(frag,'oval')
                 self.exploded_fragments.remove(frag_tuple)
                 if self.lives <= 0:
                     self.end_game()
             elif coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width or coords[3] < 0):
-                self.canvas.delete(frag)
+                self._recycle_bullet(frag,'oval')
                 self.exploded_fragments.remove(frag_tuple)
                 self.score += 1
             # Grazing check
@@ -1195,9 +1400,8 @@ class bullet_hell_game:
             indicator_id, y, timer = indicator_tuple
             timer -= 1
             if timer <= 0:
-                self.canvas.delete(indicator_id)
-                # Spawn actual laser
-                laser_id = self.canvas.create_line(0, y, self.width, y, fill="red", width=8)
+                self._recycle_bullet(indicator_id,'line')
+                laser_id = self.pool.acquire_line(0, y, self.width, y, fill="red", width=8)
                 self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
                 self.laser_indicators.remove(indicator_tuple)
             else:
@@ -1212,13 +1416,13 @@ class bullet_hell_game:
             player_coords = self.canvas.coords(self.player)
             if player_coords[1] <= y <= player_coords[3]:
                 self.lives -= 1
-                self.canvas.delete(laser_id)
+                self._recycle_bullet(laser_id,'line')
                 self.lasers.remove(laser_tuple)
                 if self.lives <= 0:
                     self.end_game()
                 continue
             if timer <= 0:
-                self.canvas.delete(laser_id)
+                self._recycle_bullet(laser_id,'line')
                 self.lasers.remove(laser_tuple)
             else:
                 idx = self.lasers.index(laser_tuple)
@@ -1237,65 +1441,13 @@ class bullet_hell_game:
         egg_speed = 6
         homing_speed = 6
 
-        # Move vertical bullets
-        for bullet in self.bullets[:]:
-            self.canvas.move(bullet, 0, bullet_speed)
-            if self.check_collision(bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-            elif self.canvas.coords(bullet)[1] > self.height:
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-                self.score += 1
-            # Grazing check
-            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bullet)
-                self.show_graze_effect()
+        # Move vertical bullets via helper
+        _process_linear(self.bullets, 0, bullet_speed, 1, 'oval')
 
-        # Move horizontal bullets
-        for bullet2 in self.bullets2[:]:
-            self.canvas.move(bullet2, bullet2_speed, 0)
-            if self.check_collision(bullet2):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(bullet2)
-                self.bullets2.remove(bullet2)
-            elif self.canvas.coords(bullet2)[0] > self.width:
-                self.canvas.delete(bullet2)
-                self.bullets2.remove(bullet2)
-                self.score += 1
-            # Grazing check
-            if self.check_graze(bullet2) and bullet2 not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bullet2)
-                self.show_graze_effect()
+        # Horizontal bullets (rightward)
+        _process_linear(self.bullets2, bullet2_speed, 0, 1, 'oval')
 
-        # Move egg bullets
-        for egg_bullet in self.egg_bullets[:]:
-            self.canvas.move(egg_bullet, 0, egg_speed)
-            if self.check_collision(egg_bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(egg_bullet)
-                self.egg_bullets.remove(egg_bullet)
-            elif self.canvas.coords(egg_bullet)[1] > self.height:
-                self.canvas.delete(egg_bullet)
-                self.egg_bullets.remove(egg_bullet)
-                self.score += 2
-            # Grazing check
-            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(egg_bullet)
-                self.show_graze_effect()
+        _process_linear(self.egg_bullets, 0, egg_speed, 2, 'oval')
 
         # Move diagonal bullets
         for bullet_tuple in self.diag_bullets[:]:
@@ -1306,10 +1458,10 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(dbullet)
+                self._recycle_bullet(dbullet,'oval')
                 self.diag_bullets.remove(bullet_tuple)
             elif self.canvas.coords(dbullet)[1] > self.height:
-                self.canvas.delete(dbullet)
+                self._recycle_bullet(dbullet,'oval')
                 self.diag_bullets.remove(bullet_tuple)
                 self.score += 2
             # Grazing check
@@ -1326,10 +1478,10 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(boss_bullet)
+                self._recycle_bullet(boss_bullet,'oval')
                 self.boss_bullets.remove(boss_bullet)
             elif self.canvas.coords(boss_bullet)[1] > self.height:
-                self.canvas.delete(boss_bullet)
+                self._recycle_bullet(boss_bullet,'oval')
                 self.boss_bullets.remove(boss_bullet)
                 self.score += 5  # Boss bullets give more score
             # Grazing check
@@ -1338,19 +1490,19 @@ class bullet_hell_game:
                 self.grazed_bullets.add(boss_bullet)
                 self.show_graze_effect()
 
-        # Move quad bullets
-        for bullet in self.bullets[:]:
+        # Move quad bullets (separate list to avoid double vertical movement)
+        for bullet in self.quad_bullets[:]:
             self.canvas.move(bullet, 0, quad_speed)
             if self.check_collision(bullet):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
+                self._recycle_bullet(bullet,'oval')
+                self.quad_bullets.remove(bullet)
             elif self.canvas.coords(bullet)[1] > self.height:
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
+                self._recycle_bullet(bullet,'oval')
+                self.quad_bullets.remove(bullet)
                 self.score += 2
             # Grazing check
             if self.check_graze(bullet) and bullet not in self.grazed_bullets:
@@ -1370,12 +1522,12 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.zigzag_bullets.remove(bullet_tuple)
             else:
                 coords = self.canvas.coords(bullet)
                 if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
-                    self.canvas.delete(bullet)
+                    self._recycle_bullet(bullet,'oval')
                     self.zigzag_bullets.remove(bullet_tuple)
                     self.score += 2
                 else:
@@ -1388,25 +1540,7 @@ class bullet_hell_game:
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
 
-        # Move fast bullets
-        for fast_bullet in self.fast_bullets[:]:
-            self.canvas.move(fast_bullet, 0, fast_speed)
-            if self.check_collision(fast_bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(fast_bullet)
-                self.fast_bullets.remove(fast_bullet)
-            elif self.canvas.coords(fast_bullet)[1] > self.height:
-                self.canvas.delete(fast_bullet)
-                self.fast_bullets.remove(fast_bullet)
-                self.score += 2
-            # Grazing check
-            if self.check_graze(fast_bullet) and fast_bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(fast_bullet)
-                self.show_graze_effect()
+        _process_linear(self.fast_bullets, 0, fast_speed, 2, 'oval')
 
         # Move & spin star bullets
         for star_bullet in self.star_bullets[:]:
@@ -1437,13 +1571,13 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(star_bullet)
+                self._recycle_bullet(star_bullet,('poly',len(self.canvas.coords(star_bullet))))
                 self.star_bullets.remove(star_bullet)
                 continue
             # Off screen
             bbox = self.canvas.bbox(star_bullet)
             if bbox and bbox[1] > self.height:
-                self.canvas.delete(star_bullet)
+                self._recycle_bullet(star_bullet,('poly',len(self.canvas.coords(star_bullet))))
                 self.star_bullets.remove(star_bullet)
                 self.score += 3
                 continue
@@ -1453,25 +1587,7 @@ class bullet_hell_game:
                 self.grazed_bullets.add(star_bullet)
                 self.show_graze_effect()
 
-        # Move rectangle bullets
-        for rect_bullet in self.rect_bullets[:]:
-            self.canvas.move(rect_bullet, 0, rect_speed)
-            if self.check_collision(rect_bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(rect_bullet)
-                self.rect_bullets.remove(rect_bullet)
-            elif self.canvas.coords(rect_bullet)[1] > self.height:
-                self.canvas.delete(rect_bullet)
-                self.rect_bullets.remove(rect_bullet)
-                self.score += 2
-            # Grazing check
-            if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(rect_bullet)
-                self.show_graze_effect()
+        _process_linear(self.rect_bullets, 0, rect_speed, 2, 'rect')
 
         # ---------------- Move homing bullets ----------------
         for hb_tuple in self.homing_bullets[:]:
@@ -1509,13 +1625,13 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.homing_bullets.remove(self.homing_bullets[idx])
             else:
                 coords = self.canvas.coords(bullet)
                 if (not coords or coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0):
                     try:
-                        self.canvas.delete(bullet)
+                        self._recycle_bullet(bullet,'oval')
                     except Exception:
                         pass
                     # Remove using safe search if idx stale
@@ -1548,11 +1664,11 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.spiral_bullets.remove(sp_tuple)
                 continue
             if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.spiral_bullets.remove(sp_tuple)
                 self.score += 2
                 continue
@@ -1573,13 +1689,59 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.radial_bullets.remove(rb_tuple)
                 continue
             coords = self.canvas.coords(bullet)
             if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.radial_bullets.remove(rb_tuple)
+                self.score += 1
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move ring burst bullets ----------------
+        for rtuple in self.ring_bullets[:]:
+            bullet, vx, vy = rtuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self._recycle_bullet(bullet,'oval')
+                self.ring_bullets.remove(rtuple)
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -30 or coords[0] > self.width + 30 or coords[3] < -30 or coords[1] > self.height + 30):
+                self._recycle_bullet(bullet,'oval')
+                self.ring_bullets.remove(rtuple)
+                self.score += 2
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+
+        # ---------------- Move fan burst bullets ----------------
+        for ftuple in self.fan_bullets[:]:
+            bullet, vx, vy = ftuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self._recycle_bullet(bullet,'oval')
+                self.fan_bullets.remove(ftuple)
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
+                self._recycle_bullet(bullet,'oval')
+                self.fan_bullets.remove(ftuple)
                 self.score += 1
                 continue
             if bullet not in self.grazed_bullets and self.check_graze(bullet):
@@ -1607,11 +1769,11 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.wave_bullets.remove(wtuple)
                 continue
             if cy > self.height + 30:
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.wave_bullets.remove(wtuple)
                 self.score += 2
                 continue
@@ -1638,11 +1800,11 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.boomerang_bullets.remove(btuple)
                 continue
             if not coords or coords[3] < -30 or coords[1] > self.height + 40:
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.boomerang_bullets.remove(btuple)
                 self.score += 3
                 continue
@@ -1669,9 +1831,9 @@ class bullet_hell_game:
                     ang = (2*math.pi/frag_count)*i
                     vx = math.cos(ang) * frag_speed
                     vy2 = math.sin(ang) * frag_speed
-                    frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
+                    frag = self.pool.acquire_oval(bx-10, by-10, 20, 20, fill="#ff55ff")
                     self.radial_bullets.append((frag, vx, vy2))
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.split_bullets.remove(stuple)
                 self.score += 3
                 continue
@@ -1680,11 +1842,11 @@ class bullet_hell_game:
                     self.lives -= 1
                     if self.lives <= 0:
                         self.end_game()
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.split_bullets.remove(stuple)
                 continue
             if coords and coords[1] > self.height:
-                self.canvas.delete(bullet)
+                self._recycle_bullet(bullet,'oval')
                 self.split_bullets.remove(stuple)
                 self.score += 2
                 continue
