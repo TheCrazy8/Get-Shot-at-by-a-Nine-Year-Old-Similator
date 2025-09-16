@@ -986,24 +986,27 @@ class bullet_hell_game:
 
     def shoot_bullet(self):
         if not self.game_over:
+            self.spawn_stats['vertical'] += 1
             x = random.randint(0, self.width-20)
             bid = self.pool.acquire_oval(x, 0, 20, 20, 'red')
-            self.bullets.append(bid)
-
+            self.bullets.append
     def shoot_egg_bullet(self):
         if not self.game_over:
+            self.spawn_stats['egg'] += 1
             x = random.randint(0, self.width-20)
             bid = self.pool.acquire_oval(x, 0, 20, 40, 'tan')
             self.egg_bullets.append(bid)
 
     def shoot_bullet2(self):
         if not self.game_over:
+            self.spawn_stats['horizontal'] += 1
             y = random.randint(0, self.height-20)
             bid = self.pool.acquire_oval(0, y, 20, 20, 'yellow')
             self.bullets2.append(bid)
 
     def shoot_diag_bullet(self):
         if not self.game_over:
+            self.spawn_stats['diag'] += 1
             x = random.randint(0, self.width-20)
             direction = random.choice([1, -1])  # 1 for right-down, -1 for left-down
             dbullet = self.canvas.create_oval(x, 0, x + 20, 20, fill="green")
@@ -1011,6 +1014,7 @@ class bullet_hell_game:
 
     def shoot_boss_bullet(self):
         if not self.game_over:
+            self.spawn_stats['boss'] += 1
             x = random.randint(self.width//4, self.width*3//4)
             bullet = self.canvas.create_oval(x, 0, x + 40, 40, fill="purple")
             self.boss_bullets.append(bullet)
@@ -1054,32 +1058,32 @@ class bullet_hell_game:
         return False
 
     def check_collision(self, bullet):
-        """Axis-aligned hitbox collision between player rectangle and a bullet shape.
-        Supports ovals/rectangles (4 coords) and polygons (>=6 coords). Returns True on hit.
-        """
         if self.practice_mode or self.game_over:
             return False
-        try:
-            b = self.canvas.coords(bullet)
-            if not b:
+        pcoords = getattr(self, '_player_coords_cached', None)
+        if not pcoords:
+            try:
+                pcoords = self.canvas.coords(self.player)
+            except Exception:
                 return False
-            # Player rectangle
-            px1, py1, px2, py2 = self.canvas.coords(self.player)
-            # Bullet bounding box
-            if len(b) == 4:
-                bx1, by1, bx2, by2 = b
-            else:
-                xs = b[::2]
-                ys = b[1::2]
-                bx1, bx2 = min(xs), max(xs)
-                by1, by2 = min(ys), max(ys)
-            # AABB overlap
-            if px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1:
-                self.handle_player_hit()
-                return True
+        if len(pcoords) < 4:
+            return False
+        px1, py1, px2, py2 = pcoords[:4]
+        try:
+            bcoords = self.canvas.coords(bullet)
         except Exception:
             return False
-        return False
+        if len(bcoords) < 4:
+            return False
+        if len(bcoords) > 4:
+            xs = bcoords[0::2]; ys = bcoords[1::2]
+            bx1 = min(xs); by1 = min(ys); bx2 = max(xs); by2 = max(ys)
+        else:
+            bx1, by1, bx2, by2 = bcoords
+        if bx2 < px1 or bx1 > px2 or by2 < py1 or by1 > py2:
+            return False
+        self.handle_player_hit()
+        return True
 
     def handle_player_hit(self):
         """Process a player hit: decrement life (if multiple), or trigger game over animation."""
@@ -1637,7 +1641,9 @@ class bullet_hell_game:
         if self.debug_mode and now - self._last_debug_update > 0.5:
             try:
                 s = self.pool.stats
-                self.canvas.itemconfig(self.debug_text, text=f"Pool N:{s['new']} R:{s['reused']} Rc:{s['recycled']} D:{s['discarded']}")
+                top = sorted(self.spawn_stats.items(), key=lambda kv: kv[1], reverse=True)[:4]
+                top_str = ' '.join(f"{k[:3]}:{v}" for k,v in top)
+                self.canvas.itemconfig(self.debug_text, text=f"Pool N:{s['new']} R:{s['reused']} Rc:{s['recycled']} D:{s['discarded']} | {top_str}")
             except Exception:
                 pass
             self._last_debug_update = now
