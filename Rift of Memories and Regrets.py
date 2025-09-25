@@ -78,6 +78,49 @@ class bullet_hell_game:
         self.wave_bullets = []        # [(bullet_id, base_x, phase, amp, vy, phase_speed)]
         self.boomerang_bullets = []   # [(bullet_id, vy, timer, state)] state: 'down'->'up'
         self.split_bullets = []       # [(bullet_id, timer)] splits into fragments after timer
+    # --- Freeze power-up state ---
+        self.freeze_powerups = []      # list of canvas item ids for freeze power-ups
+        self.freeze_active = False     # currently freezing bullets
+        self.freeze_end_time = 0.0     # wall time when freeze ends
+        self.freeze_text = None        # overlay text item during freeze
+        self.freeze_overlay = None      # translucent overlay for tint
+        self.freeze_particles = []      # list of (id, vx, vy, life)
+        self.freeze_particle_spawn_accum = 0
+        # Enhanced freeze effect parameters
+        self.freeze_mode = 'full'            # 'full' or 'slow'
+        self.freeze_motion_factor = 0.25     # movement speed factor during slow variant
+        self._freeze_motion_phase_over = False  # becomes True once motion portion ends (fade-out continues)
+        # Tint fade system (0..1 progress blended towards target)
+        self.freeze_tint_progress = 0.0
+        self.freeze_tint_target = 0.0
+        self.freeze_tint_fade_speed = 0.08
+        self._last_freeze_tint_progress = -1.0
+        # Original bullet colors cache + per-category palette
+        self._bullet_original_fills = {}
+        self.freeze_tint_palette = {
+            'vertical': '#a8ecff',
+            'horizontal': '#ffd6a8',
+            'diag': '#ffa8ec',
+            'triangle': '#c0ffa8',
+            'boss': '#ffb3b3',
+            'zigzag': '#a8d4ff',
+            'fast': '#fff7a8',
+            'star': '#d9a8ff',
+            'rect': '#a8ffe8',
+            'egg': '#ffcfa8',
+            'quad': '#ffa8a8',
+            'bouncing': '#a8ffd0',
+            'exploding': '#ffe0a8',
+            'homing': '#ffa8ff',
+            'spiral': '#a8b8ff',
+            'radial': '#a8ffee',
+            'wave': '#a8ffe0',
+            'boomerang': '#ffd0ff',
+            'split': '#e0ffa8',
+        }
+        # Audio freeze feedback
+        self._music_prev_volume = None
+        self._music_volume_restore_active = False
         self.score = 0
         self.timee = int(time.time())
         self.dial = "Hi-hi-hi! Wanna play with me? I promise it'll be fun!"
@@ -125,12 +168,15 @@ class bullet_hell_game:
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
-    # Practice mode (invincible)
+        # Practice mode (invincible)
         self.practice_mode = False
+        # Debug freeze test keys (always bound)
+        self.root.bind("f", lambda e: self.debug_trigger_freeze())      # full freeze
+        self.root.bind("F", lambda e: self.debug_trigger_slow_freeze())  # slow-motion freeze variant
         self.practice_text = None
-    # Homing bullet tuning
+        # Homing bullet tuning
         self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
-    # Player movement speed (keyboard only)
+        # Player movement speed (keyboard only)
         self.player_speed = 15
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
@@ -410,7 +456,10 @@ class bullet_hell_game:
         for line_id, t in self.grid_h_lines:
             # Move line by scroll speed scaled by its depth (closer lines move faster)
             depth_factor = (t ** self.grid_perspective_power)
-            dy = self.grid_scroll_speed * (0.3 + depth_factor*2)
+            base_dy = self.grid_scroll_speed * (0.3 + depth_factor*2)
+            if getattr(self, 'freeze_active', False):
+                base_dy *= 0.25  # slow during freeze
+            dy = base_dy
             x1, y1, x2, y2 = self.canvas.coords(line_id)
             y1 += dy
             y2 += dy
@@ -486,6 +535,19 @@ class bullet_hell_game:
         self.wave_bullets = []
         self.boomerang_bullets = []
         self.split_bullets = []
+        # Reset freeze power-up state
+        self.freeze_powerups = []
+        self.freeze_active = False
+        self.freeze_end_time = 0.0
+        self.freeze_text = None
+        if self.freeze_overlay:
+            try: self.canvas.delete(self.freeze_overlay)
+            except Exception: pass
+        self.freeze_overlay = None
+        for pid, *_ in getattr(self, 'freeze_particles', []):
+            try: self.canvas.delete(pid)
+            except Exception: pass
+        self.freeze_particles = []
         self.homing_bullet_max_life = 180
         # Reset scores/timers
         self.score = 0
@@ -807,6 +869,183 @@ class bullet_hell_game:
             bullet = self.canvas.create_oval(base_x-8, base_y-8, base_x+8, base_y+8, fill="#ffaa33", outline="#ffffff")
             self.fan_bullets.append((bullet, vx, vy))
 
+    # ---------------- Freeze Power-Up Methods ----------------
+    def spawn_freeze_powerup(self):
+        """Spawn a freeze power-up (blue snowflake-like polygon or circle) descending from top."""
+        if self.game_over:
+            return
+        x = random.randint(40, self.width - 40)
+        y = 30
+        # Simple 6-point snowflake/star representation
+        radius = 18
+        pts = []
+        for i in range(6):
+            ang = (math.pi * 2 / 6) * i
+            r = radius if i % 2 == 0 else radius * 0.55
+            px = x + _cos(ang) * r
+            py = y + _sin(ang) * r
+            pts.extend([px, py])
+        try:
+            p_id = self.canvas.create_polygon(pts, fill="#66d9ff", outline="#ffffff", width=2)
+        except Exception:
+            p_id = self.canvas.create_oval(x-radius, y-radius, x+radius, y+radius, fill="#66d9ff", outline="#ffffff")
+        self.freeze_powerups.append(p_id)
+
+    def activate_freeze(self, mode='full', duration=5.0):
+        """Activate freeze effect.
+        mode: 'full' (bullets stop) or 'slow' (bullets move at reduced speed).
+        duration: seconds of main freeze window (tint fade persists briefly after end).
+        """
+        self.freeze_mode = mode if mode in ('full','slow') else 'full'
+        self.freeze_active = True
+        self.freeze_end_time = time.time() + duration
+        self._freeze_motion_phase_over = False
+        # Start tint fade-in
+        self.freeze_tint_target = 1.0
+        # Audio feedback: dip volume
+        try:
+            if pygame.mixer.music.get_busy():
+                self._music_prev_volume = pygame.mixer.music.get_volume()
+                pygame.mixer.music.set_volume(min(1.0, self._music_prev_volume * 0.65))
+                self._music_volume_restore_active = True
+        except Exception:
+            pass
+        # Visual overlay text
+        if self.freeze_text:
+            try: self.canvas.delete(self.freeze_text)
+            except Exception: pass
+        try:
+            label = 'FREEZE' if self.freeze_mode=='full' else 'SLOW FREEZE'
+            self.freeze_text = self.canvas.create_text(self.width//2, self.height//2, text=f"{label} {duration:0.1f}s", fill="#66d9ff", font=("Arial", 48, "bold"))
+        except Exception:
+            self.freeze_text = None
+        # Optional subtle flash effect: tint background lines (skip heavy effects for simplicity)
+        # Create semi-transparent cyan overlay using stipple patterns to fake alpha
+        if self.freeze_overlay:
+            try: self.canvas.delete(self.freeze_overlay)
+            except Exception: pass
+        try:
+            self.freeze_overlay = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#66d9ff", outline="")
+            self.canvas.itemconfig(self.freeze_overlay, stipple="gray25")
+            self.canvas.tag_lower(self.freeze_overlay)  # keep it behind text
+        except Exception:
+            self.freeze_overlay = None
+        # Initialize per-bullet original colors
+        self._initialize_bullet_color_cache()
+
+    def _initialize_bullet_color_cache(self):
+        # Capture original fills only once per activation
+        try:
+            self._bullet_original_fills.clear()
+        except Exception:
+            self._bullet_original_fills = {}
+        collections = [
+            ('vertical', self.bullets), ('horizontal', self.bullets2), ('triangle',[b for b,_ in self.triangle_bullets]),
+            ('diag',[b for b,_ in self.diag_bullets]), ('boss', self.boss_bullets), ('zigzag', self.zigzag_bullets),
+            ('fast', self.fast_bullets), ('star', self.star_bullets), ('rect', self.rect_bullets), ('egg', self.egg_bullets),
+            ('quad', self.quad_bullets), ('bouncing', self.bouncing_bullets), ('exploding', self.exploding_bullets),
+            ('homing',[b for b, *_ in self.homing_bullets]), ('spiral',[b for b,*_ in self.spiral_bullets]),
+            ('radial',[b for b,*_ in self.radial_bullets]), ('wave',[b for b,*_ in self.wave_bullets]),
+            ('boomerang',[b for b,*_ in self.boomerang_bullets]), ('split',[b for b,*_ in self.split_bullets]),
+        ]
+        for cat, coll in collections:
+            for bid in coll:
+                try:
+                    if isinstance(bid, tuple):
+                        bid = bid[0]
+                    if bid not in self._bullet_original_fills:
+                        self._bullet_original_fills[bid] = (self.canvas.itemcget(bid,'fill') or '#ffffff', cat)
+                except Exception:
+                    pass
+
+    def _apply_bullet_tint_fade(self):
+        # Blend original color towards palette color based on freeze_tint_progress (0..1)
+        prog = self.freeze_tint_progress
+        if abs(prog - self._last_freeze_tint_progress) < 0.01:
+            return
+        self._last_freeze_tint_progress = prog
+        for bid, (orig_fill, cat) in list(self._bullet_original_fills.items()):
+            try:
+                target = self.freeze_tint_palette.get(cat, '#a8ecff')
+                of = orig_fill.lstrip('#')
+                tf = target.lstrip('#')
+                if len(of)!=6 or len(tf)!=6:
+                    continue
+                or_,og,ob = int(of[0:2],16), int(of[2:4],16), int(of[4:6],16)
+                tr,tg,tb = int(tf[0:2],16), int(tf[2:4],16), int(tf[4:6],16)
+                r = int(or_ + (tr-or_)*prog)
+                g = int(og + (tg-og)*prog)
+                b = int(ob + (tb-ob)*prog)
+                self.canvas.itemconfig(bid, fill=f"#{r:02x}{g:02x}{b:02x}")
+            except Exception:
+                pass
+
+    def _restore_bullet_colors(self):
+        for bid, (orig_fill, _cat) in list(self._bullet_original_fills.items()):
+            try:
+                self.canvas.itemconfig(bid, fill=orig_fill)
+            except Exception:
+                pass
+        self._bullet_original_fills.clear()
+
+    # Legacy name retained (no-op wrapper for compatibility if referenced elsewhere)
+    def _tint_all_bullets(self, freeze: bool):
+        if freeze:
+            self._initialize_bullet_color_cache()
+        else:
+            self._restore_bullet_colors()
+
+    def _spawn_unfreeze_shatter(self):
+        """Spawn small particle shards at each bullet position to emphasize thaw."""
+        try:
+            bullet_ids = []
+            for coll in [self.bullets, self.bullets2, self.triangle_bullets, self.diag_bullets, self.boss_bullets,
+                         self.zigzag_bullets, self.fast_bullets, self.star_bullets, self.rect_bullets,
+                         self.egg_bullets, self.quad_bullets, self.exploding_bullets, self.exploded_fragments,
+                         self.homing_bullets, self.spiral_bullets, self.radial_bullets, self.wave_bullets,
+                         self.boomerang_bullets, self.split_bullets, self.bouncing_bullets]:
+                for entry in coll:
+                    if isinstance(entry, tuple):
+                        bid = entry[0]
+                    else:
+                        bid = entry
+                    bullet_ids.append(bid)
+            for bid in bullet_ids:
+                coords = self.canvas.coords(bid)
+                if not coords:
+                    continue
+                if len(coords) >= 4:
+                    # derive center
+                    if len(coords) == 4:
+                        cx = (coords[0]+coords[2])/2
+                        cy = (coords[1]+coords[3])/2
+                    else:
+                        xs = coords[::2]; ys = coords[1::2]
+                        cx = sum(xs)/len(xs); cy = sum(ys)/len(ys)
+                    # spawn 4 shards
+                    for i in range(4):
+                        ang = (math.pi/2)*i + random.uniform(-0.3,0.3)
+                        spd = 3 + random.random()*2
+                        sx = cx; sy = cy
+                        size = 4
+                        pid = self.canvas.create_oval(sx-size/2, sy-size/2, sx+size/2, sy+size/2, fill="#ffffff", outline="")
+                        vx = _cos(ang)*spd
+                        vy = _sin(ang)*spd
+                        # Reuse freeze_particles list for lifecycle management (short life)
+                        self.freeze_particles.append((pid, vx, vy, 12))
+        except Exception:
+            pass
+
+    def debug_trigger_freeze(self, event=None):
+        """Manual key-triggered freeze for testing (press 'f')."""
+        if not self.freeze_active:
+            self.activate_freeze(mode='full')
+
+    def debug_trigger_slow_freeze(self, event=None):
+        """Manual key-triggered slow-motion freeze (press 'F')."""
+        if not self.freeze_active:
+            self.activate_freeze(mode='slow')
+
 
     def move_player(self, event):
         if self.paused or self.game_over:
@@ -1033,6 +1272,68 @@ class bullet_hell_game:
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Handle freeze expiration
+        if self.freeze_active and now >= self.freeze_end_time:
+            self.freeze_active = False
+            if self.freeze_text:
+                try:
+                    self.canvas.delete(self.freeze_text)
+                except Exception:
+                    pass
+                self.freeze_text = None
+            # Remove overlay & particles
+            if self.freeze_overlay:
+                try: self.canvas.delete(self.freeze_overlay)
+                except Exception: pass
+                self.freeze_overlay = None
+            for pid, *_ in self.freeze_particles:
+                try: self.canvas.delete(pid)
+                except Exception: pass
+            self.freeze_particles.clear()
+            # Restore bullet colors
+            self._tint_all_bullets(freeze=False)
+            # Spawn shatter burst effect from each bullet to show reactivation
+            self._spawn_unfreeze_shatter()
+        # Update freeze countdown text if active
+        if self.freeze_active and self.freeze_text:
+            remaining = max(0.0, self.freeze_end_time - now)
+            try:
+                self.canvas.itemconfig(self.freeze_text, text=f"FREEZE {remaining:0.1f}s")
+                self.canvas.lift(self.freeze_text)
+            except Exception:
+                pass
+        # Spawn/update freeze particles (slow drifting flakes) while frozen
+        if self.freeze_active:
+            # spawn a few each frame
+            for _ in range(3):
+                import random as _r
+                x = _r.randint(0, self.width)
+                y = _r.randint(0, self.height)
+                size = _r.randint(3,6)
+                try:
+                    pid = self.canvas.create_oval(x-size/2, y-size/2, x+size/2, y+size/2, fill="#c9f6ff", outline="")
+                except Exception:
+                    continue
+                vx = _r.uniform(-0.5,0.5)
+                vy = _r.uniform(0.2,0.8)
+                life = _r.randint(18,35)
+                self.freeze_particles.append((pid, vx, vy, life))
+            new_fp = []
+            for pid, vx, vy, life in self.freeze_particles:
+                life -= 1
+                try:
+                    self.canvas.move(pid, vx, vy)
+                    if life < 10:
+                        # fade via stipple swap if possible
+                        if life % 2 == 0:
+                            self.canvas.itemconfig(pid, fill="#99ddee")
+                    if life > 0:
+                        new_fp.append((pid, vx, vy, life))
+                    else:
+                        self.canvas.delete(pid)
+                except Exception:
+                    pass
+            self.freeze_particles = new_fp
         # Compute next unlock pattern
         remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
         if remaining_candidates:
@@ -1065,48 +1366,91 @@ class bullet_hell_game:
         boomerang_chance = 170
         split_chance = 180
 
+        # --- Freeze power-up spawn (independent of bullet patterns) ---
+        # Only spawn if not currently active and limited number on screen
+        if not self.freeze_active and len(self.freeze_powerups) < 1:
+            # Roughly ~ one every ~45s expected (1 in 900 per 50ms frame)
+            if random.randint(1, 900) == 1:
+                self.spawn_freeze_powerup()
+
+        # Move existing freeze power-ups downward & check collection
+        for p_id in self.freeze_powerups[:]:
+            try:
+                self.canvas.move(p_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                bx1, by1, bx2, by2 = self.canvas.coords(p_id)
+                if bx2 < px1 or bx1 > px2 or by2 < py1 or by1 > py2:
+                    # no overlap
+                    pass
+                else:
+                    self.activate_freeze()
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+                    continue
+                # Remove if off screen
+                if by1 > self.height:
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+            except Exception:
+                try:
+                    self.freeze_powerups.remove(p_id)
+                except Exception:
+                    pass
+
         # Time-based unlock gating (progressive difficulty)
         t = time_survived
-        if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
-            self.shoot_bullet()
-        if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
-            self.shoot_bullet2()
-        if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
-            self.shoot_diag_bullet()
-        if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
-            self.shoot_boss_bullet()
-        if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
-            self.shoot_zigzag_bullet()
-        if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
-            self.shoot_fast_bullet()
-        if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
-            self.shoot_star_bullet()
-        if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
-            self.shoot_rect_bullet()
-        if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
-            self.shoot_horizontal_laser()
-        if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
-            self.shoot_triangle_bullet()
-        if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
-            self.shoot_quad_bullet()
-        if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
-            self.shoot_egg_bullet()
-        if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
-            self.shoot_bouncing_bullet()
-        if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
-            self.shoot_exploding_bullet()
-        if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
-            self.shoot_homing_bullet()
-        if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
-            self.shoot_spiral_bullet()
-        if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
-            self.shoot_radial_burst()
-        if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
-            self.shoot_wave_bullet()
-        if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
-            self.shoot_boomerang_bullet()
-        if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
-            self.shoot_split_bullet()
+        if not self.freeze_active:
+            if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
+                self.shoot_bullet()
+            if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
+                self.shoot_bullet2()
+            if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
+                self.shoot_diag_bullet()
+            if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
+                self.shoot_boss_bullet()
+            if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
+                self.shoot_zigzag_bullet()
+            if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
+                self.shoot_fast_bullet()
+            if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
+                self.shoot_star_bullet()
+            if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
+                self.shoot_rect_bullet()
+            if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
+                self.shoot_horizontal_laser()
+            if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
+                self.shoot_triangle_bullet()
+            if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
+                self.shoot_quad_bullet()
+            if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
+                self.shoot_egg_bullet()
+            if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
+                self.shoot_bouncing_bullet()
+            if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
+                self.shoot_exploding_bullet()
+            if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
+                self.shoot_homing_bullet()
+            if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
+                self.shoot_spiral_bullet()
+            if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
+                self.shoot_radial_burst()
+            if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
+                self.shoot_wave_bullet()
+            if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
+                self.shoot_boomerang_bullet()
+            if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
+                self.shoot_split_bullet()
+
+        # If freeze is active, skip movement updates for bullets (they remain frozen in place)
+        if self.freeze_active:
+            self.root.after(50, self.update_game)
+            return
         # Move triangle bullets
         triangle_speed = 7
 
