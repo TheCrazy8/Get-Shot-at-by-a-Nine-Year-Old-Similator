@@ -19,7 +19,7 @@ def build():
 	sep = ';' if os.name == 'nt' else ':'
 	data_args = [
 		f"music.mp3{sep}.",
-		f"lore.txt{sep}."
+		f"lore.txt{sep}.",
 		f"icon3.ico{sep}."
 	]
 	PyInstaller.__main__.run([
