@@ -5,8 +5,14 @@ import pygame
 import sys
 import os
 import math
+import ctypes
 # (Steam / gamepad support removed)
-
+# Ensure Windows uses our own taskbar group and icon
+try:
+    # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TheCrazy8.RiftOfMemoriesAndRegrets")
+except Exception:
+    pass
 # Local math aliases for micro-optimizations (faster local lookups in tight loops)
 _sin = math.sin
 _cos = math.cos

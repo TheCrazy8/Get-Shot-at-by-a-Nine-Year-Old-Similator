@@ -20,6 +20,7 @@ def build():
 	data_args = [
 		f"music.mp3{sep}.",
 		f"lore.txt{sep}."
+		f"icon3.ico{sep}."
 	]
 	PyInstaller.__main__.run([
 		'Rift of Memories and Regrets.py',
