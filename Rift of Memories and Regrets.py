@@ -13,6 +13,7 @@ try:
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TheCrazy8.RiftOfMemoriesAndRegrets")
 except Exception:
     pass
+
 # Local math aliases for micro-optimizations (faster local lookups in tight loops)
 _sin = math.sin
 _cos = math.cos
@@ -63,6 +64,7 @@ class bullet_hell_game:
         self.star_bullets = []
         self.rect_bullets = []
         self.egg_bullets = []
+        self.quad_bullets = []
         self.exploding_bullets = []
         self.exploded_fragments = []  # [(bullet_id, dx, dy)]
         self.bouncing_bullets = []
