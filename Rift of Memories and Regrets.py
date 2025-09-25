@@ -932,6 +932,8 @@ class bullet_hell_game:
 
     def handle_player_hit(self):
         """Process a player hit: decrement life (if multiple), or trigger game over animation."""
+        if self.practice_mode:
+            return False
         if self.game_over:
             return
         self.lives -= 1
