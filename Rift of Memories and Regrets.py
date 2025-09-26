@@ -7,6 +7,24 @@ import os
 import math
 import ctypes
 from collections import deque
+from dataclasses import dataclass
+# Config / resource helpers (new)
+try:
+    from config import PLAYER_SPEED, GRAZING_RADIUS, FOCUS_PULSE_RADIUS, HOMING_BULLET_MAX_LIFE, FREEZE_TINT_FADE_SPEED, UNLOCK_TIMES, SPAWN_CHANCES
+    from resources import resource_path
+except Exception:
+    # Fallback defaults if files missing (e.g., during partial refactor deployment)
+    PLAYER_SPEED = 15
+    GRAZING_RADIUS = 40
+    FOCUS_PULSE_RADIUS = 140
+    HOMING_BULLET_MAX_LIFE = 180
+    FREEZE_TINT_FADE_SPEED = 0.08
+    UNLOCK_TIMES = {
+        'vertical': 0,'horizontal': 8,'diag': 15,'triangle': 25,'quad': 35,'zigzag': 45,'fast': 55,'rect': 65,'star': 75,'egg': 85,'boss': 95,'bouncing': 110,'exploding': 125,'laser': 140,'homing': 155,'spiral': 175,'radial': 195,'wave': 210,'boomerang': 225,'split': 240
+    }
+    SPAWN_CHANCES = {
+        'vertical': 18,'horizontal': 22,'diag': 28,'boss': 140,'zigzag': 40,'fast': 30,'star': 55,'rect': 48,'laser': 160,'triangle': 46,'quad': 52,'egg': 50,'bouncing': 70,'exploding': 90,'homing': 110,'spiral': 130,'radial': 150,'wave': 160,'boomerang': 170,'split': 180
+    }
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -22,15 +40,27 @@ _atan2 = math.atan2
 _pi = math.pi
 _tau = getattr(math, 'tau', 2 * math.pi)
 
+# ---------------- Pattern Registry (Step 2) ----------------
+@dataclass
+class PatternSpec:
+    name: str              # internal key
+    unlock_time: int       # seconds survived threshold
+    chance: int            # 1 in N chance per frame (base)
+    spawner: str           # method name on bullet_hell_game
+    enabled: bool = True   # allow disabling temporarily
+
+PATTERN_ORDER = [
+    'vertical','horizontal','diag','triangle','quad','zigzag','fast','rect','star','egg','boss',
+    'bouncing','exploding','laser','homing','spiral','radial','wave','boomerang','split'
+]
+
+
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
         pygame.mixer.init()
         try:
-            if hasattr(sys, '_MEIPASS'):
-                music_path = os.path.join(sys._MEIPASS, "music.mp3")
-            else:
-                music_path = "music.mp3"
+            music_path = resource_path("music.mp3")
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.play(-1)  # Loop indefinitely
         except Exception as e:
@@ -209,7 +239,7 @@ class bullet_hell_game:
         self.focus_pulse_visuals = []  # list of (id, life, grow_speed)
         self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
         self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
-        self.grazing_radius = 40
+        self.grazing_radius = GRAZING_RADIUS
         self.grazed_bullets = set()
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
@@ -218,33 +248,41 @@ class bullet_hell_game:
         self.practice_mode = False
         self.practice_text = None
         # Homing bullet tuning
-        self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
+        self.homing_bullet_max_life = HOMING_BULLET_MAX_LIFE  # frames (~9s at 50ms update)
         # Player movement speed (keyboard only)
-        self.player_speed = 15
+        self.player_speed = PLAYER_SPEED
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
-        self.unlock_times = {
-            'vertical': 0,
-            'horizontal': 8,
-            'diag': 15,
-            'triangle': 25,
-            'quad': 35,
-            'zigzag': 45,
-            'fast': 55,
-            'rect': 65,
-            'star': 75,
-            'egg': 85,
-            'boss': 95,
-            'bouncing': 110,
-            'exploding': 125,
-            'laser': 140,
-            'homing': 155,
-            'spiral': 175,
-            'radial': 195,
-            'wave': 210,
-            'boomerang': 225,
-            'split': 240
-        }
+        self.unlock_times = dict(UNLOCK_TIMES)
+        # Initialize pattern registry (name -> PatternSpec). Uses current unlock_times and SPAWN_CHANCES.
+        self.pattern_registry = {}
+        for pname in PATTERN_ORDER:
+            ut = self.unlock_times.get(pname, 0)
+            ch = SPAWN_CHANCES.get(pname, 999999)
+            # Determine spawner method mapping (method names follow shoot_* or specialized ones)
+            if pname == 'vertical': mname = 'shoot_bullet'
+            elif pname == 'horizontal': mname = 'shoot_bullet2'
+            elif pname == 'diag': mname = 'shoot_diag_bullet'
+            elif pname == 'triangle': mname = 'shoot_triangle_bullet'
+            elif pname == 'quad': mname = 'shoot_quad_bullet'
+            elif pname == 'zigzag': mname = 'shoot_zigzag_bullet'
+            elif pname == 'fast': mname = 'shoot_fast_bullet'
+            elif pname == 'rect': mname = 'shoot_rect_bullet'
+            elif pname == 'star': mname = 'shoot_star_bullet'
+            elif pname == 'egg': mname = 'shoot_egg_bullet'
+            elif pname == 'boss': mname = 'shoot_boss_bullet'
+            elif pname == 'bouncing': mname = 'shoot_bouncing_bullet'
+            elif pname == 'exploding': mname = 'shoot_exploding_bullet'
+            elif pname == 'laser': mname = 'shoot_horizontal_laser'
+            elif pname == 'homing': mname = 'shoot_homing_bullet'
+            elif pname == 'spiral': mname = 'shoot_spiral_bullet'
+            elif pname == 'radial': mname = 'shoot_radial_burst'
+            elif pname == 'wave': mname = 'shoot_wave_bullet'
+            elif pname == 'boomerang': mname = 'shoot_boomerang_bullet'
+            elif pname == 'split': mname = 'shoot_split_bullet'
+            else: mname = None
+            if mname is not None:
+                self.pattern_registry[pname] = PatternSpec(pname, ut, ch, mname)
         # Initialize lore fragments (non-destructive)
         try:
             self.init_lore()
@@ -625,7 +663,7 @@ class bullet_hell_game:
             try: self.canvas.delete(self.rewind_text)
             except Exception: pass
             self.rewind_text = None
-        self.homing_bullet_max_life = 180
+        self.homing_bullet_max_life = HOMING_BULLET_MAX_LIFE
         # Reset scores/timers
         self.score = 0
         self.timee = int(time.time())
@@ -644,28 +682,7 @@ class bullet_hell_game:
         self.paused_time_total = 0
         self.pause_start_time = None
         # Reset unlock schedule
-        self.unlock_times = {
-            'vertical': 0,
-            'horizontal': 8,
-            'diag': 15,
-            'triangle': 25,
-            'quad': 35,
-            'zigzag': 45,
-            'fast': 55,
-            'rect': 65,
-            'star': 75,
-            'egg': 85,
-            'boss': 95,
-            'bouncing': 110,
-            'exploding': 125,
-            'laser': 140,
-            'homing': 155,
-            'spiral': 175,
-            'radial': 195,
-            'wave': 210,
-            'boomerang': 225,
-            'split': 240
-        }
+        self.unlock_times = dict(UNLOCK_TIMES)
     # Reset any previously selected game over message
         self.selected_game_over_message = None
         # Recreate persistent lore display after clearing canvas
@@ -1731,27 +1748,8 @@ class bullet_hell_game:
         else:
             self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
 
-        # Fixed spawn chances (1 in N each frame after unlock)
-        bullet_chance = 18
-        bullet2_chance = 22
-        diag_chance = 28
-        boss_chance = 140
-        zigzag_chance = 40
-        fast_chance = 30
-        star_chance = 55
-        rect_chance = 48
-        laser_chance = 160
-        triangle_chance = 46
-        quad_chance = 52
-        egg_chance = 50
-        bouncing_chance = 70
-        exploding_chance = 90
-        homing_chance = 110
-        spiral_chance = 130
-        radial_chance = 150
-        wave_chance = 160
-        boomerang_chance = 170
-        split_chance = 180
+        # Centralized pattern spawning handled via registry after unlock scheduling
+        self._attempt_pattern_spawns(time_survived)
 
         # --- Freeze power-up spawn (independent of bullet patterns) ---
         # Only spawn if not currently active and limited number on screen
@@ -1815,50 +1813,7 @@ class bullet_hell_game:
                 try: self.rewind_powerups.remove(r_id)
                 except Exception: pass
 
-        # Time-based unlock gating (progressive difficulty)
-        t = time_survived
-        if not self.freeze_active:
-            # Skip new spawns while rewinding
-            if not self.rewind_active and t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
-                self.shoot_bullet()
-            if not self.rewind_active and t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
-                self.shoot_bullet2()
-            if not self.rewind_active and t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
-                self.shoot_diag_bullet()
-            if not self.rewind_active and t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
-                self.shoot_boss_bullet()
-            if not self.rewind_active and t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
-                self.shoot_zigzag_bullet()
-            if not self.rewind_active and t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
-                self.shoot_fast_bullet()
-            if not self.rewind_active and t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
-                self.shoot_star_bullet()
-            if not self.rewind_active and t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
-                self.shoot_rect_bullet()
-            if not self.rewind_active and t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
-                self.shoot_horizontal_laser()
-            if not self.rewind_active and t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
-                self.shoot_triangle_bullet()
-            if not self.rewind_active and t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
-                self.shoot_quad_bullet()
-            if not self.rewind_active and t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
-                self.shoot_egg_bullet()
-            if not self.rewind_active and t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
-                self.shoot_bouncing_bullet()
-            if not self.rewind_active and t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
-                self.shoot_exploding_bullet()
-            if not self.rewind_active and t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
-                self.shoot_homing_bullet()
-            if not self.rewind_active and t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
-                self.shoot_spiral_bullet()
-            if not self.rewind_active and t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
-                self.shoot_radial_burst()
-            if not self.rewind_active and t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
-                self.shoot_wave_bullet()
-            if not self.rewind_active and t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
-                self.shoot_boomerang_bullet()
-            if not self.rewind_active and t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
-                self.shoot_split_bullet()
+        # (Per-pattern spawn logic migrated to registry earlier in update cycle)
         # Capture bullet snapshot (post spawn) if not frozen or rewinding
         if not self.freeze_active and not self.rewind_active:
             try:

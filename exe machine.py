@@ -3,16 +3,10 @@ import os
 import sys
 from pathlib import Path
 
-# Get the path to the user's home directory
-home_directory = Path.home()
-
-# Construct the path to the Downloads directory
-downloads_directory = home_directory / "Downloads"
-
-# Change the current working directory to the Downloads directory
-os.chdir(downloads_directory)
-
-print(f"Successfully navigated to: {os.getcwd()}")
+# Change working directory to project root (folder containing this script)
+PROJECT_ROOT = Path(__file__).resolve().parent
+os.chdir(PROJECT_ROOT)
+print(f"Building from project root: {PROJECT_ROOT}")
 
 def build():
 	# PyInstaller uses different separator in --add-data (Windows=';', others=':')
@@ -20,14 +14,17 @@ def build():
 	data_args = [
 		f"music.mp3{sep}.",
 		f"lore.txt{sep}.",
-		f"icon3.ico{sep}."
+		f"icon3.ico{sep}.",
 	]
+	# Note: Python source modules (config.py, resources.py) are bundled automatically.
+	# Explicit --add-data ensures non-Python assets are accessible to resource_path().
 	PyInstaller.__main__.run([
 		'Rift of Memories and Regrets.py',
 		*[f'--add-data={d}' for d in data_args],
 		'--onefile',
 		'--windowed',
-		'--icon=icon3.ico'
+		'--icon=icon3.ico',
+		'--name=RiftOfMemories'
 	])
 
 if __name__ == '__main__':
