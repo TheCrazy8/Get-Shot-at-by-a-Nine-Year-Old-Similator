@@ -12,6 +12,7 @@ from dataclasses import dataclass
 try:
     from config import PLAYER_SPEED, GRAZING_RADIUS, FOCUS_PULSE_RADIUS, HOMING_BULLET_MAX_LIFE, FREEZE_TINT_FADE_SPEED, UNLOCK_TIMES, SPAWN_CHANCES
     from resources import resource_path
+    from bullets import Bullet, BulletRegistry
 except Exception:
     # Fallback defaults if files missing (e.g., during partial refactor deployment)
     PLAYER_SPEED = 15
@@ -25,6 +26,8 @@ except Exception:
     SPAWN_CHANCES = {
         'vertical': 18,'horizontal': 22,'diag': 28,'boss': 140,'zigzag': 40,'fast': 30,'star': 55,'rect': 48,'laser': 160,'triangle': 46,'quad': 52,'egg': 50,'bouncing': 70,'exploding': 90,'homing': 110,'spiral': 130,'radial': 150,'wave': 160,'boomerang': 170,'split': 180
     }
+    Bullet = None
+    BulletRegistry = None
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -254,6 +257,8 @@ class bullet_hell_game:
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = dict(UNLOCK_TIMES)
+        # Unified bullet registry (Step 3 transitional structure)
+        self._bullet_registry = BulletRegistry() if BulletRegistry else None
         # Initialize pattern registry (name -> PatternSpec). Uses current unlock_times and SPAWN_CHANCES.
         self.pattern_registry = {}
         for pname in PATTERN_ORDER:
@@ -283,6 +288,11 @@ class bullet_hell_game:
             else: mname = None
             if mname is not None:
                 self.pattern_registry[pname] = PatternSpec(pname, ut, ch, mname)
+        # Bullet update dispatch table (kind -> handler) (Step 4)
+        self._bullet_handlers = {
+            'vertical': self._update_vertical_bullet,
+            'horizontal': self._update_horizontal_bullet,
+        }
         # Initialize lore fragments (non-destructive)
         try:
             self.init_lore()
@@ -713,6 +723,12 @@ class bullet_hell_game:
             bid = self.canvas.create_oval(x+offset, 0, x+offset+20, 20, fill="red")
             new_ids.append(bid)
         self.quad_bullets.extend(new_ids)
+        if self._bullet_registry:
+            for bid in new_ids:
+                try:
+                    self._bullet_registry.register(Bullet(bid, 'quad'))
+                except Exception:
+                    pass
 
     def shoot_triangle_bullet(self):
         if not self.game_over:
@@ -722,6 +738,11 @@ class bullet_hell_game:
             points = [x, 0, x+20, 0, x+10, 20]
             bullet = self.canvas.create_polygon(points, fill="#bfff00")
             self.triangle_bullets.append((bullet, direction))
+            if self._bullet_registry:
+                try:
+                    self._bullet_registry.register(Bullet(bullet, 'triangle'))
+                except Exception:
+                    pass
 
     def get_dialog_string(self):
         dialogs = [
@@ -1612,6 +1633,13 @@ class bullet_hell_game:
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Synchronize unified bullet registry with legacy lists (Step 3 enhancement)
+        if hasattr(self, '_bullet_registry'):
+            try:
+                self._sync_registry_from_lists()
+                self._prune_registry()
+            except Exception:
+                pass
         # Handle freeze expiration
         if self.freeze_active and now >= self.freeze_end_time:
             self.freeze_active = False
@@ -1978,53 +2006,9 @@ class bullet_hell_game:
         egg_speed = 6
         homing_speed = 6
 
-        # Move vertical bullets
-        for bullet in self.bullets[:]:
-            self.canvas.move(bullet, 0, bullet_speed)
-            if self.check_collision(bullet):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-            elif self.canvas.coords(bullet)[1] > self.height:
-                self.canvas.delete(bullet)
-                self.bullets.remove(bullet)
-                self.score += 1
-            # Grazing check
-            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bullet)
-                self.show_graze_effect()
-                if self.focus_active:
-                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
-                    if self.focus_charge >= self.focus_charge_threshold:
-                        self.focus_charge_ready = True
-
-        # Move horizontal bullets
-        for bullet2 in self.bullets2[:]:
-            self.canvas.move(bullet2, bullet2_speed, 0)
-            if self.check_collision(bullet2):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
-                self.canvas.delete(bullet2)
-                self.bullets2.remove(bullet2)
-            elif self.canvas.coords(bullet2)[0] > self.width:
-                self.canvas.delete(bullet2)
-                self.bullets2.remove(bullet2)
-                self.score += 1
-            # Grazing check
-            if self.check_graze(bullet2) and bullet2 not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bullet2)
-                self.show_graze_effect()
-                if self.focus_active:
-                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
-                    if self.focus_charge >= self.focus_charge_threshold:
-                        self.focus_charge_ready = True
+        # Dispatch-driven updates for some bullet kinds (Step 4)
+        self._dispatch_update_kind('vertical', speed=bullet_speed)
+        self._dispatch_update_kind('horizontal', speed=bullet2_speed, horizontal=True)
 
         # Move egg bullets
         for egg_bullet in self.egg_bullets[:]:
@@ -2978,6 +2962,172 @@ class bullet_hell_game:
         except Exception:
             pass
 
+    # -------- Registry Sync Helpers (Step 3 extended) --------
+    def _sync_registry_from_lists(self):
+        reg = getattr(self, '_bullet_registry', None)
+        if not reg:
+            return
+        have = reg.by_id
+        def reg_basic(item_id, kind, meta=None):
+            if item_id in have:
+                return
+            try:
+                b = Bullet(item_id, kind)
+                if meta:
+                    b.extra.update(meta)
+                reg.register(b)
+            except Exception:
+                pass
+        # Basic vertical & horizontal
+        for bid in self.bullets:
+            reg_basic(bid, 'vertical')
+        for bid in self.bullets2:
+            reg_basic(bid, 'horizontal')
+        # Directional (triangle/diag)
+        for bid, direction in self.triangle_bullets:
+            reg_basic(bid, 'triangle', {'direction': direction})
+        for bid, direction in self.diag_bullets:
+            reg_basic(bid, 'diag', {'direction': direction})
+        # Simple id lists
+        for lst, kind in [
+            (self.boss_bullets, 'boss'), (self.zigzag_bullets, 'zigzag'), (self.fast_bullets, 'fast'),
+            (self.star_bullets, 'star'), (self.rect_bullets, 'rect'), (self.egg_bullets, 'egg'),
+            (self.quad_bullets, 'quad'), (self.bouncing_bullets, 'bouncing'), (self.exploding_bullets, 'exploding')
+        ]:
+            for bid in lst:
+                reg_basic(bid, kind)
+        # Fragments
+        for bid, dx, dy in self.exploded_fragments:
+            reg_basic(bid, 'fragment', {'dx': dx, 'dy': dy})
+        # Homing
+        for bid, vx, vy in self.homing_bullets:
+            reg_basic(bid, 'homing', {'vx': vx, 'vy': vy})
+        # Spiral
+        for bid, angle, radius, ang_speed, rad_speed, cx, cy in self.spiral_bullets:
+            reg_basic(bid, 'spiral', {'angle': angle, 'radius': radius, 'ang_speed': ang_speed, 'rad_speed': rad_speed, 'cx': cx, 'cy': cy})
+        # Radial
+        for bid, vx, vy in self.radial_bullets:
+            reg_basic(bid, 'radial', {'vx': vx, 'vy': vy})
+        # Wave
+        for bid, base_x, phase, amp, vy, phase_speed in self.wave_bullets:
+            reg_basic(bid, 'wave', {'base_x': base_x, 'phase': phase, 'amp': amp, 'vy': vy, 'phase_speed': phase_speed})
+        # Boomerang
+        for bid, vy, timer, state in self.boomerang_bullets:
+            reg_basic(bid, 'boomerang', {'vy': vy, 'timer': timer, 'state': state})
+        # Split
+        for bid, timer in self.split_bullets:
+            reg_basic(bid, 'split', {'timer': timer})
+
+    def _prune_registry(self):
+        reg = getattr(self, '_bullet_registry', None)
+        if not reg:
+            return
+        for b in list(reg.bullets_all):
+            try:
+                if not self.canvas.type(b.item_id):
+                    reg.remove(b.item_id)
+            except Exception:
+                try:
+                    reg.remove(b.item_id)
+                except Exception:
+                    pass
+
+    # -------- Bullet update dispatch (Step 4) --------
+    def _dispatch_update_kind(self, kind: str, **kwargs):
+        handler = self._bullet_handlers.get(kind)
+        if not handler:
+            return
+        # For now we still rely on legacy lists; later we'll iterate registry
+        if kind == 'vertical':
+            source = self.bullets
+        elif kind == 'horizontal':
+            source = self.bullets2
+        else:
+            source = []
+        # Copy to allow safe removal inside loop
+        for bid in source[:]:
+            handler(bid, source, **kwargs)
+
+    def _update_vertical_bullet(self, bid, container, speed=7, **_):
+        try:
+            self.canvas.move(bid, 0, speed)
+        except Exception:
+            try: container.remove(bid)
+            except Exception: pass
+            return
+        # Collision
+        if self.check_collision(bid):
+            if not self.practice_mode:
+                self.lives -= 1
+                if self.lives <= 0:
+                    self.end_game()
+            try: self.canvas.delete(bid)
+            except Exception: pass
+            try: container.remove(bid)
+            except Exception: pass
+            return
+        # Off screen
+        try:
+            if self.canvas.coords(bid)[1] > self.height:
+                try: self.canvas.delete(bid)
+                except Exception: pass
+                try: container.remove(bid)
+                except Exception: pass
+                self.score += 1
+                return
+        except Exception:
+            return
+        # Graze
+        try:
+            if self.check_graze(bid) and bid not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bid)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+        except Exception:
+            pass
+
+    def _update_horizontal_bullet(self, bid, container, speed=7, horizontal=False, **_):
+        try:
+            self.canvas.move(bid, speed, 0)
+        except Exception:
+            try: container.remove(bid)
+            except Exception: pass
+            return
+        if self.check_collision(bid):
+            if not self.practice_mode:
+                self.lives -= 1
+                if self.lives <= 0:
+                    self.end_game()
+            try: self.canvas.delete(bid)
+            except Exception: pass
+            try: container.remove(bid)
+            except Exception: pass
+            return
+        try:
+            if self.canvas.coords(bid)[0] > self.width:
+                try: self.canvas.delete(bid)
+                except Exception: pass
+                try: container.remove(bid)
+                except Exception: pass
+                self.score += 1
+                return
+        except Exception:
+            return
+        try:
+            if self.check_graze(bid) and bid not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bid)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+        except Exception:
+            pass
 if __name__ == "__main__":
     root = tk.Tk()
     game = bullet_hell_game(root)
