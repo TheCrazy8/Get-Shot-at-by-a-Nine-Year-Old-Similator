@@ -6,7 +6,6 @@ import sys
 import os
 import math
 import ctypes
-# (Steam / gamepad support removed)
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -118,6 +117,33 @@ class bullet_hell_game:
             'boomerang': '#ffd0ff',
             'split': '#e0ffa8',
         }
+        # --- Rewind power-up state ---
+        # Rewinds all bullets' positions and states backwards in time for a short duration.
+        self.rewind_powerups = []   # canvas ids of rewind pickups
+        self.rewind_active = False
+        self.rewind_end_time = 0.0
+        self.rewind_text = None
+        # History of bullet states (list of frames). Each frame is dict of category->list of state tuples.
+        self._bullet_history = []
+        self._bullet_history_max = 180  # about 9 seconds at 50ms
+        self._rewind_pointer = None     # index into history during rewind
+        self._rewind_capture_skip = 0   # frame skip accumulator (optional throttle)
+        self._rewind_speed = 2          # frames to rewind per update tick
+        self._rewind_overlay = None
+        self.rewind_pending = False           # if collected during freeze, delay activation
+        self._pending_rewind_duration = 3.0   # queued duration
+        self._rewind_ghosts = []              # list of (ghost_id, life)
+        self._rewind_ghost_life = 10          # frames a ghost persists
+        self._rewind_ghost_spawn_skip = 0     # toggle to spawn every other frame
+        self._rewind_ghost_cap = 300          # maximum ghost trail items to retain
+        # Rewind sounds (lazy loaded)
+        self._rewind_start_sound = None
+        self._rewind_end_sound = None
+        # Rewind bonus + visuals
+        self._rewind_start_bullet_count = 0
+        self._rewind_bonus_factor = 0.2   # 20% of bullets count (rounded) as score bonus
+        self._rewind_vignette_ids = []
+        self.rewind_pending_text = None
         # Audio freeze feedback
         self._music_prev_volume = None
         self._music_volume_restore_active = False
@@ -170,9 +196,6 @@ class bullet_hell_game:
         self.pause_start_time = None  # When pause started
         # Practice mode (invincible)
         self.practice_mode = False
-        # Debug freeze test keys (always bound)
-        self.root.bind("f", lambda e: self.debug_trigger_freeze())      # full freeze
-        self.root.bind("F", lambda e: self.debug_trigger_slow_freeze())  # slow-motion freeze variant
         self.practice_text = None
         # Homing bullet tuning
         self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
@@ -548,6 +571,40 @@ class bullet_hell_game:
             try: self.canvas.delete(pid)
             except Exception: pass
         self.freeze_particles = []
+        # Reset rewind power-up state
+        for rid in getattr(self, 'rewind_powerups', []):
+            try: self.canvas.delete(rid)
+            except Exception: pass
+        self.rewind_powerups = []
+        self.rewind_active = False
+        self.rewind_end_time = 0.0
+        self._bullet_history = []
+        self._rewind_pointer = None
+        self.rewind_pending = False
+        self._pending_rewind_duration = 3.0
+        if hasattr(self, '_rewind_ghosts'):
+            for gid, _life in self._rewind_ghosts:
+                try: self.canvas.delete(gid)
+                except Exception: pass
+            self._rewind_ghosts = []
+        # Clear vignette & queued text
+        if hasattr(self, '_rewind_vignette_ids'):
+            for vid in self._rewind_vignette_ids:
+                try: self.canvas.delete(vid)
+                except Exception: pass
+            self._rewind_vignette_ids = []
+        if getattr(self, 'rewind_pending_text', None):
+            try: self.canvas.delete(self.rewind_pending_text)
+            except Exception: pass
+            self.rewind_pending_text = None
+        if getattr(self, '_rewind_overlay', None):
+            try: self.canvas.delete(self._rewind_overlay)
+            except Exception: pass
+            self._rewind_overlay = None
+        if getattr(self, 'rewind_text', None):
+            try: self.canvas.delete(self.rewind_text)
+            except Exception: pass
+            self.rewind_text = None
         self.homing_bullet_max_life = 180
         # Reset scores/timers
         self.score = 0
@@ -1036,6 +1093,235 @@ class bullet_hell_game:
         except Exception:
             pass
 
+    # ---------------- Rewind Power-Up ----------------
+    def spawn_rewind_powerup(self):
+        """Spawn a rewind power-up (greenish hourglass/spiral)."""
+        if self.game_over:
+            return
+        x = random.randint(40, self.width - 40)
+        y = 30
+        # Simple hourglass polygon
+        try:
+            size = 18
+            pts = [x-size, y-size, x+size, y-size, x+size/2, y, x+size, y+size, x-size, y+size, x-size/2, y]
+            rid = self.canvas.create_polygon(pts, fill="#66ff99", outline="#ffffff", width=2)
+        except Exception:
+            rid = self.canvas.create_oval(x-18, y-18, x+18, y+18, fill="#66ff99", outline="#ffffff")
+        self.rewind_powerups.append(rid)
+
+    def activate_rewind(self, duration=3.0):
+        """Begin rewinding bullet positions for a short duration.
+        Bullets move backwards along recorded history; no new bullets spawn and no movement forward.
+        """
+        if self.freeze_active:
+            # Queue rewind until freeze ends
+            self.rewind_pending = True
+            self._pending_rewind_duration = duration
+            return
+        if not self._bullet_history:
+            return
+        self.rewind_active = True
+        self.rewind_end_time = time.time() + duration
+        self._rewind_pointer = len(self._bullet_history) - 1  # start from last frame
+        if self.rewind_text:
+            try: self.canvas.delete(self.rewind_text)
+            except Exception: pass
+        try:
+            self.rewind_text = self.canvas.create_text(self.width//2, self.height//2 - 80, text="REWIND", fill="#66ff99", font=("Arial", 56, "bold"))
+        except Exception:
+            self.rewind_text = None
+        if self._rewind_overlay:
+            try: self.canvas.delete(self._rewind_overlay)
+            except Exception: pass
+        try:
+            self._rewind_overlay = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#003322", outline="")
+            self.canvas.itemconfig(self._rewind_overlay, stipple="gray25")
+            self.canvas.tag_lower(self._rewind_overlay)
+        except Exception:
+            self._rewind_overlay = None
+        # Remove queued text if present
+        if self.rewind_pending_text:
+            try: self.canvas.delete(self.rewind_pending_text)
+            except Exception: pass
+            self.rewind_pending_text = None
+        # Count bullets at start for bonus
+        try:
+            self._rewind_start_bullet_count = sum([
+                len(self.bullets), len(self.bullets2), len(self.triangle_bullets), len(self.diag_bullets), len(self.boss_bullets),
+                len(self.zigzag_bullets), len(self.fast_bullets), len(self.star_bullets), len(self.rect_bullets), len(self.egg_bullets),
+                len(self.quad_bullets), len(self.exploding_bullets), len(self.exploded_fragments), len(self.bouncing_bullets),
+                len(self.homing_bullets), len(self.spiral_bullets), len(self.radial_bullets), len(self.wave_bullets), len(self.boomerang_bullets), len(self.split_bullets)
+            ])
+        except Exception:
+            self._rewind_start_bullet_count = 0
+        # Create vignette visual
+        self._create_rewind_vignette()
+        # Load & play sound
+        try:
+            if self._rewind_start_sound is None:
+                base_dir = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+                p = os.path.join(base_dir, 'rewind_start.wav')
+                if os.path.exists(p):
+                    self._rewind_start_sound = pygame.mixer.Sound(p)
+            if self._rewind_start_sound:
+                self._rewind_start_sound.play()
+        except Exception:
+            pass
+
+    def _capture_bullet_snapshot(self):
+        """Record current bullet positions for rewind history."""
+        frame = {}
+        def capture_list(name, coll):
+            arr = []
+            for entry in coll:
+                if isinstance(entry, tuple):
+                    bid = entry[0]
+                else:
+                    bid = entry
+                coords = self.canvas.coords(bid)
+                if not coords:
+                    continue
+                arr.append((bid, tuple(coords)))
+            frame[name] = arr
+        capture_list('bullets', self.bullets)
+        capture_list('bullets2', self.bullets2)
+        capture_list('triangle_bullets', self.triangle_bullets)
+        capture_list('diag_bullets', self.diag_bullets)
+        capture_list('boss_bullets', self.boss_bullets)
+        capture_list('zigzag_bullets', self.zigzag_bullets)
+        capture_list('fast_bullets', self.fast_bullets)
+        capture_list('star_bullets', self.star_bullets)
+        capture_list('rect_bullets', self.rect_bullets)
+        capture_list('egg_bullets', self.egg_bullets)
+        capture_list('quad_bullets', self.quad_bullets)
+        capture_list('exploding_bullets', self.exploding_bullets)
+        capture_list('exploded_fragments', self.exploded_fragments)
+        capture_list('bouncing_bullets', self.bouncing_bullets)
+        capture_list('homing_bullets', self.homing_bullets)
+        capture_list('spiral_bullets', self.spiral_bullets)
+        capture_list('radial_bullets', self.radial_bullets)
+        capture_list('wave_bullets', self.wave_bullets)
+        capture_list('boomerang_bullets', self.boomerang_bullets)
+        capture_list('split_bullets', self.split_bullets)
+        # lasers & indicators not rewound (temporal hazards), skip
+        self._bullet_history.append(frame)
+        if len(self._bullet_history) > self._bullet_history_max:
+            self._bullet_history.pop(0)
+
+    def _perform_rewind_step(self):
+        if self._rewind_pointer is None or not self._bullet_history:
+            return
+        # Spawn ghost traces
+        self._spawn_rewind_ghosts()
+        # apply snapshot
+        frame = self._bullet_history[self._rewind_pointer]
+        for key, arr in frame.items():
+            for tup in arr:
+                bid = tup[0]
+                coords = tup[1]
+                try:
+                    self.canvas.coords(bid, *coords)
+                except Exception:
+                    pass
+        self._rewind_pointer -= self._rewind_speed
+        if self._rewind_pointer < 0:
+            self._rewind_pointer = 0
+        # Update ghosts fade
+        self._update_rewind_ghosts()
+
+    def _spawn_rewind_ghosts(self):
+        if self._rewind_ghost_spawn_skip:
+            self._rewind_ghost_spawn_skip = 0
+            return
+        else:
+            self._rewind_ghost_spawn_skip = 1
+        ghost_color = '#66ffcc'
+        # Skip spawning if already above cap
+        if len(self._rewind_ghosts) >= self._rewind_ghost_cap:
+            return
+        groups = [
+            self.bullets, self.bullets2, [b for b,_ in self.triangle_bullets],
+            [b for b,_ in self.diag_bullets], self.boss_bullets, self.zigzag_bullets,
+            self.fast_bullets, self.star_bullets, self.rect_bullets, self.egg_bullets,
+            self.quad_bullets, self.exploding_bullets, [b for b, *_ in self.homing_bullets],
+            [b for b,*_ in self.spiral_bullets], [b for b,*_ in self.radial_bullets],
+            self.wave_bullets, [b for b,*_ in self.boomerang_bullets], [b for b,*_ in self.split_bullets],
+            self.bouncing_bullets, [b for b,*_ in self.exploded_fragments]
+        ]
+        for grp in groups:
+            for bid in grp:
+                try:
+                    c = self.canvas.coords(bid)
+                    if len(c) < 4:
+                        continue
+                    if len(c) == 4:
+                        ghost_id = self.canvas.create_rectangle(c[0],c[1],c[2],c[3], outline=ghost_color, width=1)
+                    else:
+                        xs=c[0::2]; ys=c[1::2]
+                        ghost_id = self.canvas.create_polygon(min(xs),min(ys),max(xs),min(ys),max(xs),max(ys),min(xs),max(ys), outline=ghost_color, fill="", width=1)
+                    self.canvas.tag_lower(ghost_id, self.player)
+                    self._rewind_ghosts.append((ghost_id, self._rewind_ghost_life))
+                    if len(self._rewind_ghosts) >= self._rewind_ghost_cap:
+                        return
+                except Exception:
+                    pass
+
+    def _update_rewind_ghosts(self):
+        new=[]
+        for gid, life in self._rewind_ghosts:
+            life -=1
+            if life<=0:
+                try: self.canvas.delete(gid)
+                except Exception: pass
+                continue
+            try:
+                frac=life/self._rewind_ghost_life
+                r=int(0x66*frac); g=int(0xff*frac); b=int(0xcc*frac)
+                self.canvas.itemconfig(gid, outline=f"#{r:02x}{g:02x}{b:02x}")
+            except Exception:
+                pass
+            new.append((gid,life))
+        self._rewind_ghosts=new
+        # light trimming if somehow exceeded cap
+        if len(self._rewind_ghosts) > self._rewind_ghost_cap:
+            overflow = len(self._rewind_ghosts) - self._rewind_ghost_cap
+            for i in range(overflow):
+                gid, _ = self._rewind_ghosts[i]
+                try: self.canvas.delete(gid)
+                except Exception: pass
+            self._rewind_ghosts = self._rewind_ghosts[overflow:]
+
+    # --- Rewind vignette helpers ---
+    def _create_rewind_vignette(self):
+        # Clear existing
+        try:
+            for vid in self._rewind_vignette_ids:
+                self.canvas.delete(vid)
+        except Exception:
+            pass
+        self._rewind_vignette_ids = []
+        try:
+            cx = self.width/2; cy = self.height/2
+            max_r = max(self.width, self.height)*0.75
+            rings = 5
+            for i in range(rings):
+                frac = i / rings
+                r = max_r * (1 - 0.15*frac)
+                color = '#003322' if i%2==0 else '#004433'
+                oval = self.canvas.create_oval(cx-r, cy-r, cx+r, cy+r, outline="", fill=color)
+                try: self.canvas.itemconfig(oval, stipple="gray25")
+                except Exception: pass
+                self.canvas.tag_lower(oval)
+                self._rewind_vignette_ids.append(oval)
+        except Exception:
+            self._rewind_vignette_ids = []
+
+    def _clear_rewind_vignette(self):
+        for vid in self._rewind_vignette_ids:
+            try: self.canvas.delete(vid)
+            except Exception: pass
+        self._rewind_vignette_ids = []
+
     def debug_trigger_freeze(self, event=None):
         """Manual key-triggered freeze for testing (press 'f')."""
         if not self.freeze_active:
@@ -1294,6 +1580,70 @@ class bullet_hell_game:
             self._tint_all_bullets(freeze=False)
             # Spawn shatter burst effect from each bullet to show reactivation
             self._spawn_unfreeze_shatter()
+        # Handle rewind expiration
+        if self.rewind_active and now >= self.rewind_end_time:
+            self.rewind_active = False
+            self._rewind_pointer = None
+            if self.rewind_text:
+                try: self.canvas.delete(self.rewind_text)
+                except Exception: pass
+                self.rewind_text = None
+            if self._rewind_overlay:
+                try: self.canvas.delete(self._rewind_overlay)
+                except Exception: pass
+                self._rewind_overlay = None
+            # Clear vignette
+            self._clear_rewind_vignette()
+            # Award score bonus based on bullet count at start
+            try:
+                bonus = int(self._rewind_start_bullet_count * self._rewind_bonus_factor)
+                if bonus > 0:
+                    self.score += bonus
+                    # transient floating text
+                    try:
+                        txt = self.canvas.create_text(self.width//2, self.height//2 + 60, text=f"+{bonus} REWIND BONUS", fill="#66ff99", font=("Arial", 28, "bold"))
+                        self.canvas.after(1200, lambda tid=txt: (self.canvas.delete(tid) if self.canvas.type(tid) else None))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # Play end sound
+            try:
+                if self._rewind_end_sound is None:
+                    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+                    p = os.path.join(base_dir, 'rewind_end.wav')
+                    if os.path.exists(p):
+                        self._rewind_end_sound = pygame.mixer.Sound(p)
+                if self._rewind_end_sound:
+                    self._rewind_end_sound.play()
+            except Exception:
+                pass
+        # If freeze just ended and a rewind was pending, activate it now
+        if (not self.freeze_active) and self.rewind_pending and not self.rewind_active:
+            self.rewind_pending = False
+            self.activate_rewind(self._pending_rewind_duration)
+        # Update rewind countdown label
+        if self.rewind_active and self.rewind_text:
+            remaining = max(0.0, self.rewind_end_time - now)
+            try:
+                self.canvas.itemconfig(self.rewind_text, text=f"REWIND {remaining:0.1f}s")
+                self.canvas.lift(self.rewind_text)
+            except Exception:
+                pass
+        # Show queued rewind label if pending
+        if self.rewind_pending and not self.rewind_active:
+            if not self.rewind_pending_text:
+                try:
+                    self.rewind_pending_text = self.canvas.create_text(self.width//2, self.height//2 - 140, text="REWIND QUEUED", fill="#66ff99", font=("Arial", 24, "bold"))
+                except Exception:
+                    self.rewind_pending_text = None
+            else:
+                try: self.canvas.lift(self.rewind_pending_text)
+                except Exception: pass
+        else:
+            if self.rewind_pending_text and not self.rewind_active:
+                # If no longer pending (activated), it is cleared inside activate_rewind
+                pass
         # Update freeze countdown text if active
         if self.freeze_active and self.freeze_text:
             remaining = max(0.0, self.freeze_end_time - now)
@@ -1372,6 +1722,11 @@ class bullet_hell_game:
             # Roughly ~ one every ~45s expected (1 in 900 per 50ms frame)
             if random.randint(1, 900) == 1:
                 self.spawn_freeze_powerup()
+        # --- Rewind power-up spawn ---
+        if not self.rewind_active and len(self.rewind_powerups) < 1:
+            # Rarer than freeze (approx one every ~70s)
+            if random.randint(1, 1400) == 1 and len(self._bullet_history) > 40:
+                self.spawn_rewind_powerup()
 
         # Move existing freeze power-ups downward & check collection
         for p_id in self.freeze_powerups[:]:
@@ -1402,53 +1757,85 @@ class bullet_hell_game:
                     self.freeze_powerups.remove(p_id)
                 except Exception:
                     pass
+        # Move existing rewind power-ups & check collection
+        for r_id in self.rewind_powerups[:]:
+            try:
+                self.canvas.move(r_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                rx1, ry1, rx2, ry2 = self.canvas.coords(r_id)
+                # collection overlap
+                if not (rx2 < px1 or rx1 > px2 or ry2 < py1 or ry1 > py2):
+                    self.activate_rewind()
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+                    continue
+                if ry1 > self.height:
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+            except Exception:
+                try: self.rewind_powerups.remove(r_id)
+                except Exception: pass
 
         # Time-based unlock gating (progressive difficulty)
         t = time_survived
         if not self.freeze_active:
-            if t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
+            # Skip new spawns while rewinding
+            if not self.rewind_active and t >= self.unlock_times['vertical'] and random.randint(1, bullet_chance) == 1:
                 self.shoot_bullet()
-            if t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['horizontal'] and random.randint(1, bullet2_chance) == 1:
                 self.shoot_bullet2()
-            if t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['diag'] and random.randint(1, diag_chance) == 1:
                 self.shoot_diag_bullet()
-            if t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['boss'] and random.randint(1, boss_chance) == 1:
                 self.shoot_boss_bullet()
-            if t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['zigzag'] and random.randint(1, zigzag_chance) == 1:
                 self.shoot_zigzag_bullet()
-            if t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['fast'] and random.randint(1, fast_chance) == 1:
                 self.shoot_fast_bullet()
-            if t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['star'] and random.randint(1, star_chance) == 1:
                 self.shoot_star_bullet()
-            if t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['rect'] and random.randint(1, rect_chance) == 1:
                 self.shoot_rect_bullet()
-            if t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['laser'] and random.randint(1, laser_chance) == 1:
                 self.shoot_horizontal_laser()
-            if t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['triangle'] and random.randint(1, triangle_chance) == 1:
                 self.shoot_triangle_bullet()
-            if t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['quad'] and random.randint(1, quad_chance) == 1:
                 self.shoot_quad_bullet()
-            if t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['egg'] and random.randint(1, egg_chance) == 1:
                 self.shoot_egg_bullet()
-            if t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['bouncing'] and random.randint(1, bouncing_chance) == 1:
                 self.shoot_bouncing_bullet()
-            if t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['exploding'] and random.randint(1, exploding_chance) == 1:
                 self.shoot_exploding_bullet()
-            if t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['homing'] and random.randint(1, homing_chance) == 1:
                 self.shoot_homing_bullet()
-            if t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['spiral'] and random.randint(1, spiral_chance) == 1:
                 self.shoot_spiral_bullet()
-            if t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['radial'] and random.randint(1, radial_chance) == 1:
                 self.shoot_radial_burst()
-            if t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['wave'] and random.randint(1, wave_chance) == 1:
                 self.shoot_wave_bullet()
-            if t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['boomerang'] and random.randint(1, boomerang_chance) == 1:
                 self.shoot_boomerang_bullet()
-            if t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
+            if not self.rewind_active and t >= self.unlock_times['split'] and random.randint(1, split_chance) == 1:
                 self.shoot_split_bullet()
+        # Capture bullet snapshot (post spawn) if not frozen or rewinding
+        if not self.freeze_active and not self.rewind_active:
+            try:
+                self._capture_bullet_snapshot()
+            except Exception:
+                pass
 
         # If freeze is active, skip movement updates for bullets (they remain frozen in place)
         if self.freeze_active:
+            self.root.after(50, self.update_game)
+            return
+        if self.rewind_active:
+            # Rewind bullet positions instead of advancing
+            self._perform_rewind_step()
             self.root.after(50, self.update_game)
             return
         # Move triangle bullets
