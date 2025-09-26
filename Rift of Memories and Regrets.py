@@ -6,6 +6,7 @@ import sys
 import os
 import math
 import ctypes
+from collections import deque
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -189,6 +190,25 @@ class bullet_hell_game:
         self.root.bind("<Escape>", self.toggle_pause)
         self.root.bind("r", self.restart_game)
         self.root.bind("p", self.toggle_practice_mode)
+        # Debug HUD state
+        self.debug_hud_enabled = False
+        self._debug_hud_text_id = None
+        self._frame_time_buffer = deque(maxlen=120)
+        self._last_frame_time_stamp = time.perf_counter()
+        self.root.bind('<F3>', self.toggle_debug_hud)
+        # Focus / Pulse mechanic state
+        self.focus_active = False
+        self.focus_charge = 0.0  # 0..1
+        self.focus_charge_ready = False
+        self.focus_charge_threshold = 1.0
+        self.focus_charge_rate = 0.004  # per frame while holding
+        self.focus_charge_graze_bonus = 0.05
+        self.focus_pulse_cooldown = 0.0
+        self.focus_pulse_cooldown_time = 2.0  # seconds before recharge can start
+        self.focus_pulse_radius = 140
+        self.focus_pulse_visuals = []  # list of (id, life, grow_speed)
+        self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
+        self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
         self.grazing_radius = 40
         self.grazed_bullets = set()
         self.graze_effect_id = None
@@ -1336,7 +1356,7 @@ class bullet_hell_game:
     def move_player(self, event):
         if self.paused or self.game_over:
             return
-        s = self.player_speed
+        s = self.player_speed * (0.5 if self.focus_active else 1.0)
         if event.keysym in ('Left','a'):
             self.apply_player_move(-s,0)
         elif event.keysym in ('Right','d'):
@@ -1520,6 +1540,23 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        # Frame timing capture for Debug HUD
+        try:
+            now_perf = time.perf_counter()
+            if hasattr(self, '_last_frame_time_stamp'):
+                dt_ms = (now_perf - self._last_frame_time_stamp) * 1000.0
+                self._frame_time_buffer.append(dt_ms)
+            self._last_frame_time_stamp = now_perf
+        except Exception:
+            pass
+        # Update focus pulse cooldown timer (wall time based)
+        if self.focus_pulse_cooldown > 0:
+            self.focus_pulse_cooldown -= 0.05  # approx frame duration
+            if self.focus_pulse_cooldown < 0:
+                self.focus_pulse_cooldown = 0
+        # Update focus charge accumulation & visuals
+        self._update_focus_charge()
+        self._update_focus_visuals()
     # (Removed controller polling)
     # Background animation
         self.update_background()
@@ -2005,6 +2042,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move horizontal bullets
         for bullet2 in self.bullets2[:]:
@@ -2025,6 +2066,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet2)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move egg bullets
         for egg_bullet in self.egg_bullets[:]:
@@ -2045,6 +2090,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(egg_bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move diagonal bullets
         for bullet_tuple in self.diag_bullets[:]:
@@ -2066,6 +2115,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(dbullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move boss bullets
         for boss_bullet in self.boss_bullets[:]:
@@ -2086,6 +2139,10 @@ class bullet_hell_game:
                 self.score += 2
                 self.grazed_bullets.add(boss_bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move quad bullets
         for bullet in self.quad_bullets[:]:
@@ -2106,6 +2163,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move zigzag bullets
         for bullet_tuple in self.zigzag_bullets[:]:
@@ -2136,6 +2197,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move fast bullets
         for fast_bullet in self.fast_bullets[:]:
@@ -2156,6 +2221,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(fast_bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move & spin star bullets
         for star_bullet in self.star_bullets[:]:
@@ -2201,6 +2270,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(star_bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Move rectangle bullets
         for rect_bullet in self.rect_bullets[:]:
@@ -2221,6 +2294,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(rect_bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move homing bullets ----------------
         for hb_tuple in self.homing_bullets[:]:
@@ -2281,6 +2358,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move spiral bullets ----------------
         for sp_tuple in self.spiral_bullets[:]:
@@ -2312,6 +2393,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move radial burst bullets ----------------
         for rb_tuple in self.radial_bullets[:]:
@@ -2335,6 +2420,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move wave bullets ----------------
         for wtuple in self.wave_bullets[:]:
@@ -2370,6 +2459,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move boomerang bullets ----------------
         for btuple in self.boomerang_bullets[:]:
@@ -2401,6 +2494,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # ---------------- Move split bullets ----------------
         for stuple in self.split_bullets[:]:
@@ -2443,6 +2540,10 @@ class bullet_hell_game:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
 
         # Mid-screen lore fragment display (spawn + blink + expire)
         try:
@@ -2470,6 +2571,170 @@ class bullet_hell_game:
             pass
 
         self.root.after(50, self.update_game)
+        # Update Debug HUD late so counts reflect this frame's state
+        if self.debug_hud_enabled:
+            self._update_debug_hud()
+
+    # ---------------- Focus / Pulse mechanic helpers ----------------
+    def _focus_key_pressed(self, event=None):
+        if self.game_over or self.paused:
+            return
+        if self.focus_pulse_cooldown > 0:
+            return
+        self.focus_active = True
+
+    def _focus_key_released(self, event=None):
+        if not self.focus_active:
+            return
+        # Trigger pulse if charged
+        if self.focus_charge_ready and self.focus_charge >= self.focus_charge_threshold:
+            self._trigger_focus_pulse()
+        self.focus_active = False
+
+    def _update_focus_charge(self):
+        if self.game_over or self.paused:
+            return
+        if self.focus_active and not self.focus_charge_ready:
+            if self.focus_pulse_cooldown <= 0:
+                self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_rate)
+                if self.focus_charge >= self.focus_charge_threshold:
+                    self.focus_charge_ready = True
+
+    def _trigger_focus_pulse(self):
+        # Clear bullets within radius and grant score; reset charge and start cooldown
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2)/2
+            pcy = (py1 + py2)/2
+        except Exception:
+            return
+        radius = self.focus_pulse_radius
+        radius_sq = radius * radius
+        removed = 0
+        # Gather bullet containers (flatten)
+        containers = [
+            self.bullets, self.bullets2, [b for b,_ in self.triangle_bullets], [b for b,_ in self.diag_bullets],
+            self.boss_bullets, self.zigzag_bullets, self.fast_bullets, self.star_bullets, self.rect_bullets,
+            self.egg_bullets, self.quad_bullets, self.exploding_bullets, [b for b,_ in self.exploded_fragments],
+            self.bouncing_bullets, [b for b,*_ in self.homing_bullets], [b for b,*_ in self.spiral_bullets],
+            [b for b,*_ in self.radial_bullets], self.wave_bullets, [b for b,*_ in self.boomerang_bullets],
+            [b for b,*_ in self.split_bullets]
+        ]
+        # Delete bullets close to player (using bounding-box center approximation)
+        for group in containers:
+            for bid in list(group):
+                try:
+                    c = self.canvas.coords(bid if not isinstance(bid, tuple) else bid[0])
+                    if not c:
+                        continue
+                    if len(c) == 4:
+                        bx = (c[0]+c[2])/2; by = (c[1]+c[3])/2
+                    else:
+                        xs=c[0::2]; ys=c[1::2]; bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
+                    dx = bx - pcx; dy = by - pcy
+                    if dx*dx + dy*dy <= radius_sq:
+                        self.canvas.delete(bid if not isinstance(bid, tuple) else bid[0])
+                        removed += 1
+                        # Remove from actual container where possible
+                        try:
+                            if bid in self.bullets: self.bullets.remove(bid)
+                        except Exception: pass
+                except Exception:
+                    pass
+        # Score reward
+        self.score += removed * 2
+        # Visual expanding ring
+        try:
+            ring = self.canvas.create_oval(pcx-10, pcy-10, pcx+10, pcy+10, outline="#66ffdd", width=3)
+            self.focus_pulse_visuals.append((ring, 18, radius/18))  # life frames, grow per frame
+        except Exception:
+            pass
+        # Reset charge
+        self.focus_charge = 0.0
+        self.focus_charge_ready = False
+        self.focus_pulse_cooldown = self.focus_pulse_cooldown_time
+
+    def _update_focus_visuals(self):
+        if not self.focus_pulse_visuals:
+            return
+        new = []
+        for oid, life, grow in self.focus_pulse_visuals:
+            life -= 1
+            try:
+                x1,y1,x2,y2 = self.canvas.coords(oid)
+                cx = (x1+x2)/2; cy=(y1+y2)/2
+                nx1 = cx - ( (x2-x1)/2 + grow)
+                nx2 = cx + ( (x2-x1)/2 + grow)
+                ny1 = cy - ( (y2-y1)/2 + grow)
+                ny2 = cy + ( (y2-y1)/2 + grow)
+                self.canvas.coords(oid, nx1, ny1, nx2, ny2)
+                # Fade color
+                frac = max(0.0, life/18)
+                col = int(0x66*frac), int(0xff*frac), int(0xdd*frac)
+                self.canvas.itemconfig(oid, outline=f"#{col[0]:02x}{col[1]:02x}{col[2]:02x}")
+            except Exception:
+                life = 0
+            if life > 0:
+                new.append((oid, life, grow))
+            else:
+                try: self.canvas.delete(oid)
+                except Exception: pass
+        self.focus_pulse_visuals = new
+
+    # ---------------- Debug HUD ----------------
+    def toggle_debug_hud(self, event=None):
+        self.debug_hud_enabled = not self.debug_hud_enabled
+        if not self.debug_hud_enabled and self._debug_hud_text_id:
+            try: self.canvas.delete(self._debug_hud_text_id)
+            except Exception: pass
+            self._debug_hud_text_id = None
+
+    def _update_debug_hud(self):
+        try:
+            counts = {
+                'vert': len(self.bullets), 'horiz': len(self.bullets2), 'tri': len(self.triangle_bullets),
+                'diag': len(self.diag_bullets), 'boss': len(self.boss_bullets), 'zig': len(self.zigzag_bullets),
+                'fast': len(self.fast_bullets), 'star': len(self.star_bullets), 'rect': len(self.rect_bullets),
+                'egg': len(self.egg_bullets), 'quad': len(self.quad_bullets), 'bounc': len(self.bouncing_bullets),
+                'expl': len(self.exploding_bullets) + len(self.exploded_fragments), 'hom': len(self.homing_bullets),
+                'spir': len(self.spiral_bullets), 'rad': len(self.radial_bullets), 'wave': len(self.wave_bullets),
+                'boom': len(self.boomerang_bullets), 'split': len(self.split_bullets), 'las': len(self.lasers)
+            }
+        except Exception:
+            counts = {}
+        total = sum(counts.values()) if counts else 0
+        if self._frame_time_buffer:
+            avg = sum(self._frame_time_buffer)/len(self._frame_time_buffer)
+            worst = max(self._frame_time_buffer)
+            best = min(self._frame_time_buffer)
+        else:
+            avg = worst = best = 0.0
+        eff = []
+        if self.freeze_active: eff.append('FREEZE')
+        if self.rewind_active: eff.append('REWIND')
+        if self.rewind_pending and not self.rewind_active: eff.append('REWIND-Q')
+        if self.focus_active: eff.append('FOCUS')
+        if self.focus_charge_ready: eff.append('PULSE READY')
+        eff_str = ','.join(eff) if eff else 'None'
+        focus_pct = int(self.focus_charge*100)
+        lines = [
+            '== DEBUG HUD (F3)==',
+            f'Bullets Total:{total}  '+ ' '.join(f"{k}:{v}" for k,v in counts.items()),
+            f'Frame ms avg:{avg:.1f} best:{best:.1f} worst:{worst:.1f}',
+            f'Effects: {eff_str}',
+            f'Focus: {focus_pct}%'+(' READY' if self.focus_charge_ready else ''),
+        ]
+        txt = '\n'.join(lines)
+        if self._debug_hud_text_id is None:
+            try:
+                self._debug_hud_text_id = self.canvas.create_text(8, 80, text=txt, anchor='nw', fill='#7cffd9', font=('Consolas', 11))
+            except Exception:
+                return
+        else:
+            try: self.canvas.itemconfig(self._debug_hud_text_id, text=txt)
+            except Exception: pass
+        try: self.canvas.lift(self._debug_hud_text_id)
+        except Exception: pass
 
     def init_lore(self):
         """Initialize lore fragments from external lore.txt file.
