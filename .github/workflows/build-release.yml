@@ -38,7 +38,7 @@ jobs:
         id: rename
         run: |
           $tag = '${{ github.ref_name }}'
-          $dest = "RiftOfMemories-$tag.exe"
+          $dest = "Rift of Memories and Regrets.exe"
           Copy-Item dist/RiftOfMemories.exe $dest
           echo "artifact_name=$dest" >> $env:GITHUB_OUTPUT
 
