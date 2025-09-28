@@ -212,7 +212,12 @@ class bullet_hell_game:
         }
         # Moved next pattern display to bottom center
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
-        self.lives = 1
+        # --- Health System: start with 5 HP instead of 1 life ---
+        self.lives = 5
+        try:
+            self.health_text = self.canvas.create_text(70, 50, text=f"HP: {self.lives}", fill="white", font=("Arial", 16))
+        except Exception:
+            self.health_text = None
         self.game_over = False
         self.paused = False
         self.pause_text = None
@@ -254,6 +259,10 @@ class bullet_hell_game:
         self.homing_bullet_max_life = HOMING_BULLET_MAX_LIFE  # frames (~9s at 50ms update)
         # Player movement speed (keyboard only)
         self.player_speed = PLAYER_SPEED
+        # Damage flash state
+        self._damage_flash_overlay = None
+        self._damage_flash_frames = 0
+        self._damage_flash_player_frames = 0
         # Progressive unlock times (seconds survived) for bullet categories
         # 0: basic vertical (already active), later adds more complexity.
         self.unlock_times = dict(UNLOCK_TIMES)
@@ -679,10 +688,16 @@ class bullet_hell_game:
         self.timee = int(time.time())
         self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        # Recreate health HUD element
+        try:
+            self.health_text = self.canvas.create_text(70, 50, text=f"HP: {self.lives}", fill="white", font=("Arial", 16))
+        except Exception:
+            self.health_text = None
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
         # Core state
-        self.lives = 1
+        # Reset health to full (5 HP)
+        self.lives = 5
         self.game_over = False
         self.paused = False
         self.pause_text = None
@@ -1528,6 +1543,11 @@ class bullet_hell_game:
         if self.game_over:
             return
         self.lives -= 1
+        # Trigger damage flash visuals
+        try:
+            self._start_damage_flash()
+        except Exception:
+            pass
         if self.lives <= 0:
             # Pick a random game over message once
             try:
@@ -1547,6 +1567,58 @@ class bullet_hell_game:
             # Flash player or simple feedback (placeholder)
             try:
                 self.canvas.itemconfig(self.player, fill="#ffffff")
+            except Exception:
+                pass
+    # ---- Damage Flash Helpers ----
+    def _start_damage_flash(self):
+        # Create / reset a semi-transparent red overlay and player flicker
+        self._damage_flash_frames = 12  # duration frames
+        self._damage_flash_player_frames = 18
+        if self._damage_flash_overlay is None:
+            try:
+                ov = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#ff0000", outline="")
+                # Use stipple for fake alpha
+                try: self.canvas.itemconfig(ov, stipple="gray50")
+                except Exception: pass
+                self._damage_flash_overlay = ov
+            except Exception:
+                self._damage_flash_overlay = None
+        else:
+            # Move to top
+            try: self.canvas.lift(self._damage_flash_overlay)
+            except Exception: pass
+        # Ensure update loop will fade it out (hooked in update_game end segment)
+
+    def _update_damage_flash(self):
+        """Fade and remove damage overlay / player flicker."""
+        if self._damage_flash_frames > 0 and self._damage_flash_overlay is not None:
+            self._damage_flash_frames -= 1
+            # Adjust stipple density / color brightness
+            try:
+                frac = self._damage_flash_frames / 12.0
+                # Darken color over time
+                val = int(255 * frac)
+                col = f"#{val:02x}0000"
+                self.canvas.itemconfig(self._damage_flash_overlay, fill=col)
+                self.canvas.lift(self._damage_flash_overlay)
+            except Exception:
+                pass
+            if self._damage_flash_frames <= 0:
+                try:
+                    self.canvas.delete(self._damage_flash_overlay)
+                except Exception:
+                    pass
+                self._damage_flash_overlay = None
+        # Player flicker
+        if self._damage_flash_player_frames > 0:
+            self._damage_flash_player_frames -= 1
+            try:
+                # Alternate visibility by toggling outline color of deco items & fill
+                visible = (self._damage_flash_player_frames % 4) < 2
+                fill = "#ffffff" if visible else "#444444"
+                self.canvas.itemconfig(self.player, fill=fill)
+                for item in getattr(self, 'player_deco_items', []):
+                    self.canvas.itemconfig(item, state='normal' if visible else 'hidden')
             except Exception:
                 pass
 
@@ -1633,6 +1705,13 @@ class bullet_hell_game:
         time_survived = int(now - self.timee - self.paused_time_total)
         self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
         self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Update health HUD each frame
+        if getattr(self, 'health_text', None) is not None:
+            try:
+                self.canvas.itemconfig(self.health_text, text=f"HP: {max(0, self.lives)}")
+                self.canvas.lift(self.health_text)
+            except Exception:
+                pass
         # Synchronize unified bullet registry with legacy lists (Step 3 enhancement)
         if hasattr(self, '_bullet_registry'):
             try:
@@ -1856,6 +1935,9 @@ class bullet_hell_game:
         if self.rewind_active:
             # Rewind bullet positions instead of advancing
             self._perform_rewind_step()
+            # Damage flash fade while rewinding
+            try: self._update_damage_flash()
+            except Exception: pass
             self.root.after(50, self.update_game)
             return
         # Move triangle bullets
@@ -2509,6 +2591,11 @@ class bullet_hell_game:
         except Exception:
             pass
 
+        # Update damage flash visuals (overlay & flicker)
+        try:
+            self._update_damage_flash()
+        except Exception:
+            pass
         self.root.after(50, self.update_game)
         # Update Debug HUD late so counts reflect this frame's state
         if self.debug_hud_enabled:
