@@ -78,6 +78,7 @@ class bullet_hell_game:
         self.canvas.pack(fill=tk.BOTH, expand=True)
         # Store customizable background color change interval (seconds)
         self.bg_color_interval = bg_color_interval
+        # Removed unused ring_bullets container to simplify
     # Initialize animated vaporwave grid background
         self.init_background()
         # Create player (base hitbox rectangle + decorative layers)
@@ -181,6 +182,41 @@ class bullet_hell_game:
         # Audio freeze feedback
         self._music_prev_volume = None
         self._music_volume_restore_active = False
+        # --- Health & Focus scaffolding (injected) ---
+        if not hasattr(self, 'lives'):
+            self.lives = 5
+        try:
+            self.health_text = self.canvas.create_text(70, 50, text=f"HP: {self.lives}", fill="white", font=("Arial", 16))
+        except Exception:
+            self.health_text = None
+        # Focus base state (skip if already defined)
+        self.focus_active = False
+        self.focus_charge = 0.0
+        self.focus_charge_threshold = 1.0
+        self.focus_charge_ready = False
+        self.focus_charge_rate = 0.004
+        self.focus_charge_graze_bonus = 0.05
+        self.focus_pulse_cooldown = 0.0
+        self.focus_pulse_cooldown_time = 2.0
+        self.focus_pulse_radius = 140
+        self.focus_pulse_visuals = []
+        # Overheat extension
+        self.focus_overheat = 0.0
+        self.focus_overheat_rate = 0.012
+        self.focus_overheat_cool_rate = 0.01
+        self.focus_overheat_locked = False
+        self.focus_overheat_lock_until = 0.0
+        self.focus_overheat_decay_on_pulse = 0.45
+        self.focus_overheat_text = None
+        # I-frames
+        self.iframes_frames = 0
+        # Bind focus keys
+        try:
+            self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
+            self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
+        except Exception:
+            pass
+        # ...existing code continues...
         self.score = 0
         self.timee = int(time.time())
         self.dial = "Hi-hi-hi! Wanna play with me? I promise it'll be fun!"
@@ -950,23 +986,9 @@ class bullet_hell_game:
             # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
             self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
 
-    def shoot_ring_burst(self):
-        """Spawn a circular ring of bullets that fly outward."""
-        if self.game_over:
-            return
-        cx = random.randint(self.width//4, self.width*3//4)
-        cy = random.randint(100, self.height//2)
-        count = 12
-        speed = 4 + self.difficulty/6
-        radius = 24
-        for i in range(count):
-            ang = (2*math.pi / count) * i
-            bx = cx + _cos(ang)*radius
-            by = cy + _sin(ang)*radius
-            bullet = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#55ffdd", outline="#ffffff")
-            vx = _cos(ang) * speed
-            vy = _sin(ang) * speed
-            self.ring_bullets.append((bullet, vx, vy))
+    # Removed shoot_ring_burst (unused) to avoid undefined variable lint noise
+    # def shoot_ring_burst(self):
+    #     ...removed...
 
     def shoot_fan_burst(self):
         """Spawn a fan spread of bullets aimed roughly at player with angular spread."""
@@ -2360,7 +2382,7 @@ class bullet_hell_game:
                 self.homing_bullets.remove(self.homing_bullets[idx])
             else:
                 coords = self.canvas.coords(bullet)
-                if (not coords or coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0):
+                if (coords and (coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0)):
                     try:
                         self.canvas.delete(bullet)
                     except Exception:
@@ -2460,7 +2482,7 @@ class bullet_hell_game:
             cy = (by1 + by2)/2
             cx = base_x + _sin(phase) * amp
             size = bx2 - bx1
-            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+height/2)
+            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+size/2)
             if self.check_collision(bullet):
                 if not self.practice_mode:
                     self.lives -= 1
@@ -2603,619 +2625,3174 @@ class bullet_hell_game:
 
     # ---------------- Focus / Pulse mechanic helpers ----------------
     def _focus_key_pressed(self, event=None):
-        if self.game_over or self.paused:
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
             return
-        if self.focus_pulse_cooldown > 0:
+        if self.focus_overheat_locked:
             return
         self.focus_active = True
 
     def _focus_key_released(self, event=None):
-        if not self.focus_active:
-            return
-        # Trigger pulse if charged
-        if self.focus_charge_ready and self.focus_charge >= self.focus_charge_threshold:
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
             self._trigger_focus_pulse()
         self.focus_active = False
 
-    def _update_focus_charge(self):
-        if self.game_over or self.paused:
-            return
-        if self.focus_active and not self.focus_charge_ready:
-            if self.focus_pulse_cooldown <= 0:
-                self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_rate)
-                if self.focus_charge >= self.focus_charge_threshold:
-                    self.focus_charge_ready = True
-
     def _trigger_focus_pulse(self):
-        # Clear bullets within radius and grant score; reset charge and start cooldown
+        # Visual ring
         try:
             px1, py1, px2, py2 = self.canvas.coords(self.player)
-            pcx = (px1 + px2)/2
-            pcy = (py1 + py2)/2
+            cx = (px1+px2)/2; cy = (py1+py2)/2
+            ring = self.canvas.create_oval(cx-10, cy-10, cx+10, cy+10, outline="#66ffff", width=3)
+            self.focus_pulse_visuals.append((ring, 0))  # (id, life)
         except Exception:
-            return
-        radius = self.focus_pulse_radius
-        radius_sq = radius * radius
+            pass
+        # Affect bullets within radius: simple delete for now
         removed = 0
-        # Gather bullet containers (flatten)
-        containers = [
-            self.bullets, self.bullets2, [b for b,_ in self.triangle_bullets], [b for b,_ in self.diag_bullets],
-            self.boss_bullets, self.zigzag_bullets, self.fast_bullets, self.star_bullets, self.rect_bullets,
-            self.egg_bullets, self.quad_bullets, self.exploding_bullets, [b for b,_ in self.exploded_fragments],
-            self.bouncing_bullets, [b for b,*_ in self.homing_bullets], [b for b,*_ in self.spiral_bullets],
-            [b for b,*_ in self.radial_bullets], self.wave_bullets, [b for b,*_ in self.boomerang_bullets],
-            [b for b,*_ in self.split_bullets]
-        ]
-        # Delete bullets close to player (using bounding-box center approximation)
-        for group in containers:
-            for bid in list(group):
+        radius2 = self.focus_pulse_radius ** 2
+        for coll in [self.bullets, self.bullets2, self.triangle_bullets, self.diag_bullets, self.boss_bullets, self.zigzag_bullets, self.fast_bullets,
+                     self.star_bullets, self.rect_bullets, self.egg_bullets, self.quad_bullets, self.exploding_bullets, self.bouncing_bullets]:
+            for entry in coll[:]:
+                bid = entry[0] if isinstance(entry, tuple) else entry
                 try:
-                    c = self.canvas.coords(bid if not isinstance(bid, tuple) else bid[0])
+                    c = self.canvas.coords(bid)
                     if not c:
                         continue
                     if len(c) == 4:
                         bx = (c[0]+c[2])/2; by = (c[1]+c[3])/2
                     else:
-                        xs=c[0::2]; ys=c[1::2]; bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
-                    dx = bx - pcx; dy = by - pcy
-                    if dx*dx + dy*dy <= radius_sq:
-                        self.canvas.delete(bid if not isinstance(bid, tuple) else bid[0])
+                        xs=c[0::2]; ys=c[1::2]
+                        bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
+                    dx = bx - cx; dy = by - cy
+                    if dx*dx + dy*dy <= radius2:
+                        self.canvas.delete(bid)
+                        coll.remove(entry)
                         removed += 1
-                        # Remove from actual container where possible
-                        try:
-                            if bid in self.bullets: self.bullets.remove(bid)
-                        except Exception: pass
                 except Exception:
                     pass
         # Score reward
-        self.score += removed * 2
-        # Visual expanding ring
-        try:
-            ring = self.canvas.create_oval(pcx-10, pcy-10, pcx+10, pcy+10, outline="#66ffdd", width=3)
-            self.focus_pulse_visuals.append((ring, 18, radius/18))  # life frames, grow per frame
-        except Exception:
-            pass
-        # Reset charge
+        self.score += removed
+        # Reset focus charge & overheat decay
         self.focus_charge = 0.0
         self.focus_charge_ready = False
+        self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_decay_on_pulse)
         self.focus_pulse_cooldown = self.focus_pulse_cooldown_time
 
     def _update_focus_visuals(self):
-        if not self.focus_pulse_visuals:
-            return
-        new = []
-        for oid, life, grow in self.focus_pulse_visuals:
-            life -= 1
+        new=[]
+        for rid, life in self.focus_pulse_visuals:
+            life += 1
             try:
-                x1,y1,x2,y2 = self.canvas.coords(oid)
-                cx = (x1+x2)/2; cy=(y1+y2)/2
-                nx1 = cx - ( (x2-x1)/2 + grow)
-                nx2 = cx + ( (x2-x1)/2 + grow)
-                ny1 = cy - ( (y2-y1)/2 + grow)
-                ny2 = cy + ( (y2-y1)/2 + grow)
-                self.canvas.coords(oid, nx1, ny1, nx2, ny2)
-                # Fade color
-                frac = max(0.0, life/18)
-                col = int(0x66*frac), int(0xff*frac), int(0xdd*frac)
-                self.canvas.itemconfig(oid, outline=f"#{col[0]:02x}{col[1]:02x}{col[2]:02x}")
+                # expand & fade
+                x1,y1,x2,y2 = self.canvas.coords(rid)
+                cx=(x1+x2)/2; cy=(y1+y2)/2
+                growth=18
+                self.canvas.coords(rid, cx-growth-life*4, cy-growth-life*4, cx+growth+life*4, cy+growth+life*4)
+                if life % 2 == 0:
+                    self.canvas.itemconfig(rid, outline="#99ffff")
             except Exception:
-                life = 0
-            if life > 0:
-                new.append((oid, life, grow))
+                continue
+            if life < 12:
+                new.append((rid, life))
             else:
-                try: self.canvas.delete(oid)
+                try: self.canvas.delete(rid)
                 except Exception: pass
         self.focus_pulse_visuals = new
 
-    # ---------------- Debug HUD ----------------
-    def toggle_debug_hud(self, event=None):
-        self.debug_hud_enabled = not self.debug_hud_enabled
-        if not self.debug_hud_enabled and self._debug_hud_text_id:
-            try: self.canvas.delete(self._debug_hud_text_id)
-            except Exception: pass
-            self._debug_hud_text_id = None
-
-    def _update_debug_hud(self):
-        try:
-            counts = {
-                'vert': len(self.bullets), 'horiz': len(self.bullets2), 'tri': len(self.triangle_bullets),
-                'diag': len(self.diag_bullets), 'boss': len(self.boss_bullets), 'zig': len(self.zigzag_bullets),
-                'fast': len(self.fast_bullets), 'star': len(self.star_bullets), 'rect': len(self.rect_bullets),
-                'egg': len(self.egg_bullets), 'quad': len(self.quad_bullets), 'bounc': len(self.bouncing_bullets),
-                'expl': len(self.exploding_bullets) + len(self.exploded_fragments), 'hom': len(self.homing_bullets),
-                'spir': len(self.spiral_bullets), 'rad': len(self.radial_bullets), 'wave': len(self.wave_bullets),
-                'boom': len(self.boomerang_bullets), 'split': len(self.split_bullets), 'las': len(self.lasers)
-            }
-        except Exception:
-            counts = {}
-        total = sum(counts.values()) if counts else 0
-        if self._frame_time_buffer:
-            avg = sum(self._frame_time_buffer)/len(self._frame_time_buffer)
-            worst = max(self._frame_time_buffer)
-            best = min(self._frame_time_buffer)
-        else:
-            avg = worst = best = 0.0
-        eff = []
-        if self.freeze_active: eff.append('FREEZE')
-        if self.rewind_active: eff.append('REWIND')
-        if self.rewind_pending and not self.rewind_active: eff.append('REWIND-Q')
-        if self.focus_active: eff.append('FOCUS')
-        if self.focus_charge_ready: eff.append('PULSE READY')
-        eff_str = ','.join(eff) if eff else 'None'
-        focus_pct = int(self.focus_charge*100)
-        lines = [
-            '== DEBUG HUD (F3)==',
-            f'Bullets Total:{total}  '+ ' '.join(f"{k}:{v}" for k,v in counts.items()),
-            f'Frame ms avg:{avg:.1f} best:{best:.1f} worst:{worst:.1f}',
-            f'Effects: {eff_str}',
-            f'Focus: {focus_pct}%'+(' READY' if self.focus_charge_ready else ''),
-        ]
-        txt = '\n'.join(lines)
-        if self._debug_hud_text_id is None:
-            try:
-                self._debug_hud_text_id = self.canvas.create_text(8, 80, text=txt, anchor='nw', fill='#7cffd9', font=('Consolas', 11))
-            except Exception:
-                return
-        else:
-            try: self.canvas.itemconfig(self._debug_hud_text_id, text=txt)
-            except Exception: pass
-        try: self.canvas.lift(self._debug_hud_text_id)
-        except Exception: pass
-
-    def init_lore(self):
-        """Initialize lore fragments from external lore.txt file.
-        Format of lore.txt:
-          - Lines starting with '#' are comments
-          - Blank line separates fragments
-          - Multi-line fragments are combined into one line (joined with spaces)
-        Result stored in self.lore_fragments as {'all': [list_of_strings]} for compatibility.
-        If file missing or parsing fails, a minimal fallback list is used.
-        """
-        lore_file = "lore.txt"
-        # Resolve possible PyInstaller path
-        if hasattr(sys, '_MEIPASS'):
-            candidate = os.path.join(sys._MEIPASS, lore_file)
-            if os.path.exists(candidate):
-                lore_file = candidate
-        parsed_dict = None
-        # 1. Try to parse entire file as a Python dict literal
-        try:
-            import ast
-            with open(lore_file, 'r', encoding='utf-8') as f:
-                text = f.read().strip()
-            if text.startswith('{') and text.endswith('}'):  # quick heuristic
-                parsed = ast.literal_eval(text)
-                if isinstance(parsed, dict):
-                    parsed_dict = {}
-                    # Ensure all values are lists of strings
-                    for k, v in parsed.items():
-                        if isinstance(v, (list, tuple)):
-                            parsed_dict[str(k)] = [str(x) for x in v]
-                    if parsed_dict:
-                        self.lore_fragments = parsed_dict
-        except Exception:
-            parsed_dict = None
-        if parsed_dict is None:
-            # 2. Fallback: treat file as block fragments separated by blank lines
-            fragments = []
-            current_lines = []
-            try:
-                with open(lore_file, 'r', encoding='utf-8') as f2:
-                    for raw in f2:
-                        line = raw.rstrip('\n').strip()
-                        if not line or line.startswith('#'):
-                            if current_lines:
-                                fragments.append(' '.join(current_lines))
-                                current_lines = []
-                            continue
-                        current_lines.append(line)
-                if current_lines:
-                    fragments.append(' '.join(current_lines))
-            except Exception:
-                fragments = [
-                    "THE MEMORY CORE IS EMPTY BUT STILL HUMS.",
-                    "A PLACEHOLDER FRAGMENT REMINDS YOU THIS IS A FALLBACK."
-                ]
-            # De-duplicate preserving order
-            seen = set()
-            unique_fragments = []
-            for frag in fragments:
-                if frag not in seen:
-                    seen.add(frag)
-                    unique_fragments.append(frag)
-            self.lore_fragments = {'all': unique_fragments}
-        # Normalize capitalization for lore: convert whole-word 'you'/'your' to uppercase
-        try:
-            import re
-            if 'all' in self.lore_fragments:  # flat list form
-                for _i, _line in enumerate(self.lore_fragments['all']):
-                    self.lore_fragments['all'][_i] = re.sub(r"\b(you|your)\b", lambda m: m.group(0).upper(), _line, flags=re.IGNORECASE)
-            else:  # categorized dict
-                for _k, _list in self.lore_fragments.items():
-                    for _i, _line in enumerate(_list):
-                        _list[_i] = re.sub(r"\b(you|your)\b", lambda m: m.group(0).upper(), _line, flags=re.IGNORECASE)
-        except Exception:
-            pass
-
-    def update_lore_line(self, force=False):
-        if getattr(self, 'lore_fragments', None) is None:
+    def _update_focus_charge(self):
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
             return
         now = time.time()
-        if not force and now - getattr(self, 'lore_last_change', 0) < getattr(self, 'lore_interval', 8):
+        # Unlock if lock expired
+        if self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+            self.focus_overheat_locked = False
+        # Charging phase
+        if self.focus_active and not self.focus_charge_ready and not self.focus_overheat_locked:
+            if self.focus_pulse_cooldown <= 0:
+                self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_rate)
+                if self.focus_charge >= self.focus_charge_threshold:
+                    self.focus_charge_ready = True
+        # Overheat accumulation
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
+            self.focus_overheat = min(1.0, self.focus_overheat + self.focus_overheat_rate)
+            if self.focus_overheat >= 1.0:
+                self.focus_overheat_locked = True
+                self.focus_overheat_lock_until = now + 3.0
+                self.focus_active = False
+        # Passive cooldown
+        if not self.focus_active or self.focus_overheat_locked:
+            if self.focus_overheat > 0:
+                self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_cool_rate)
+                if self.focus_overheat <= 0 and self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+                    self.focus_overheat_locked = False
+
+    # Override / extend existing update_game by injecting focus + HUD + i-frames hooks
+    def update_game(self):
+        if self.game_over:
             return
-        import random
-        pool = []
-        prev = getattr(self, 'current_lore_line', None)
-        # Support both old dict-of-lists structure and new single 'all' list
+        if self.paused:
+            return
+        # Frame timing capture for Debug HUD
         try:
-            if 'all' in self.lore_fragments and isinstance(self.lore_fragments['all'], list):
-                for ln in self.lore_fragments['all']:
-                    if ln != prev:
-                        pool.append(ln)
-            else:
-                for _k, lines in self.lore_fragments.items():
-                    for ln in lines:
-                        if ln != prev:
-                            pool.append(ln)
-        except Exception:
-            return
-        if not pool:
-            return
-        line = random.choice(pool)
-        self.current_lore_line = line
-        try:
-            if getattr(self, 'lore_text', None) is not None:
-                self.canvas.itemconfig(self.lore_text, text=line)
+            now_perf = time.perf_counter()
+            if hasattr(self, '_last_frame_time_stamp'):
+                dt_ms = (now_perf - self._last_frame_time_stamp) * 1000.0
+                self._frame_time_buffer.append(dt_ms)
+            self._last_frame_time_stamp = now_perf
         except Exception:
             pass
-        self.lore_last_change = now
-
-    # --- Game Over Animation (particles + pulsing text) ---
-    def start_game_over_animation(self):
-        if getattr(self, 'go_anim_active', False):
-            return
-        self.go_anim_active = True
-        self.go_anim_particles = []
-        self.go_anim_frame = 0
-        # Glitch blackout sequence state (fix indentation)
-        self.go_glitch_phase = 0  # 0 = glitching, 1 = fading to black, 2 = black hold
-        self.go_glitch_rects = []
-        self.go_black_cover = None
-        self.go_black_alpha = 0.0
-        self.go_anim_subtext = None
-        # Large pulsing overlay text (separate from static text already created)
-        try:
-            self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2-140, text="GAME OVER", fill="#ffffff", font=("Arial", 64, "bold"))
-        except Exception:
-            self.go_anim_text = None
-        # Secondary message below if one was selected
-        if self.selected_game_over_message:
+        # Update focus pulse cooldown timer (wall time based)
+        if self.focus_pulse_cooldown > 0:
+            self.focus_pulse_cooldown -= 0.05  # approx frame duration
+            if self.focus_pulse_cooldown < 0:
+                self.focus_pulse_cooldown = 0
+        # Update focus charge accumulation & visuals
+        self._update_focus_charge()
+        self._update_focus_visuals()
+    # (Removed controller polling)
+    # Background animation
+        self.update_background()
+    # Animate player decorative sprite
+        self.animate_player_sprite()
+        self.canvas.lift(self.dialog)
+        self.canvas.lift(self.scorecount)
+        self.canvas.lift(self.timecount)
+        if hasattr(self, 'next_unlock_text'):
+            self.canvas.lift(self.next_unlock_text)
+        # Move graze effect to follow player if active
+        if self.graze_effect_id:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            self.canvas.coords(
+                self.graze_effect_id,
+                cx - self.grazing_radius, cy - self.grazing_radius,
+                cx + self.grazing_radius, cy + self.grazing_radius
+            )
+            self.graze_effect_timer -= 1
+            if self.graze_effect_timer <= 0:
+                self.canvas.delete(self.graze_effect_id)
+                self.graze_effect_id = None
+        # Increase difficulty every 60 seconds
+        now = time.time()
+    # Difficulty scaling removed
+        if now - self.lastdial > 10:
+            self.get_dialog_string()
+            self.lastdial = now
+            self.canvas.itemconfig(self.dialog, text=self.dial)
+        # Lore rotation
+        if getattr(self, 'lore_text', None) is not None and now - getattr(self, 'lore_last_change', 0) >= getattr(self, 'lore_interval', 8):
+            self.update_lore_line()
+        # Calculate time survived, pausable
+        time_survived = int(now - self.timee - self.paused_time_total)
+        self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
+        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Update health HUD each frame
+        if getattr(self, 'health_text', None) is not None:
             try:
-                self.go_anim_subtext = self.canvas.create_text(
-                    self.width//2, self.height//2 - 60,
-                    text=self.selected_game_over_message,
-                    fill="#ff66aa", font=("Courier New", 26), justify='center'
-                )
+                self.canvas.itemconfig(self.health_text, text=f"HP: {max(0, self.lives)}")
+                self.canvas.lift(self.health_text)
             except Exception:
-                self.go_anim_subtext = None
-        # Spawn radial particles from center
-        cx = self.width//2
-        cy = self.height//2
-        for i in range(60):
-            ang = random.uniform(0, 2*math.pi)
-            spd = random.uniform(2.5, 7.0)
-            vx = _cos(ang)*spd
-            vy = _sin(ang)*spd
-            size = random.randint(4,10)
-            pid = self.canvas.create_oval(cx-size//2, cy-size//2, cx+size//2, cy+size//2, fill="#ff55ff", outline="")
-            # life frames ~ fade duration
-            life = random.randint(35,70)
-            self.go_anim_particles.append((pid, vx, vy, life))
-        self.update_game_over_animation()
-
-    def update_game_over_animation(self):
-        if not getattr(self, 'go_anim_active', False):
-            return
-        self.go_anim_frame += 1
-        # --- Phase 0: Spawn transient glitch rectangles ---
-        if self.go_glitch_phase == 0:
-            # spawn a few per frame early on
-            spawn_ct = 6
-            import random
-            for _ in range(spawn_ct):
-                w = random.randint(40, max(60, self.width//6))
-                h = random.randint(8, 40)
-                x = random.randint(0, self.width - w)
-                y = random.randint(0, self.height - h)
-                col = random.choice(["#ff00ff", "#ffffff", "#ff55ff", "#aa33ff"])  # neon glitch colors
-                rid = self.canvas.create_rectangle(x, y, x+w, y+h, fill=col, outline="")
-                life = random.randint(3, 10)
-                self.go_glitch_rects.append((rid, life))
-            # decay existing glitch rects
-            new_rects = []
-            for rid, life in self.go_glitch_rects:
-                life -= 1
-                if life <= 0:
-                    try: self.canvas.delete(rid)
-                    except Exception: pass
-                else:
-                    # occasional horizontal shift for jitter
+                pass
+        # Synchronize unified bullet registry with legacy lists (Step 3 enhancement)
+        if hasattr(self, '_bullet_registry'):
+            try:
+                self._sync_registry_from_lists()
+                self._prune_registry()
+            except Exception:
+                pass
+        # Handle freeze expiration
+        if self.freeze_active and now >= self.freeze_end_time:
+            self.freeze_active = False
+            if self.freeze_text:
+                try:
+                    self.canvas.delete(self.freeze_text)
+                except Exception:
+                    pass
+                self.freeze_text = None
+            # Remove overlay & particles
+            if self.freeze_overlay:
+                try: self.canvas.delete(self.freeze_overlay)
+                except Exception: pass
+                self.freeze_overlay = None
+            for pid, *_ in self.freeze_particles:
+                try: self.canvas.delete(pid)
+                except Exception: pass
+            self.freeze_particles.clear()
+            # Restore bullet colors
+            self._tint_all_bullets(freeze=False)
+            # Spawn shatter burst effect from each bullet to show reactivation
+            self._spawn_unfreeze_shatter()
+        # Handle rewind expiration
+        if self.rewind_active and now >= self.rewind_end_time:
+            self.rewind_active = False
+            self._rewind_pointer = None
+            if self.rewind_text:
+                try: self.canvas.delete(self.rewind_text)
+                except Exception: pass
+                self.rewind_text = None
+            if self._rewind_overlay:
+                try: self.canvas.delete(self._rewind_overlay)
+                except Exception: pass
+                self._rewind_overlay = None
+            # Clear vignette
+            self._clear_rewind_vignette()
+            # Award score bonus based on bullet count at start
+            try:
+                bonus = int(self._rewind_start_bullet_count * self._rewind_bonus_factor)
+                if bonus > 0:
+                    self.score += bonus
+                    # transient floating text
                     try:
-                        dx = random.randint(-8,8)
-                        self.canvas.move(rid, dx, 0)
-                    except Exception: pass
-                    new_rects.append((rid, life))
-            self.go_glitch_rects = new_rects
-            # After some frames, advance to fade phase
-            if self.go_anim_frame > 55:
-                self.go_glitch_phase = 1
-        # --- Phase 1: Fade a black overlay in and delete scene ---
-        elif self.go_glitch_phase == 1:
-            # Create black cover once
-            if self.go_black_cover is None:
-                try:
-                    self.go_black_cover = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#000000", outline="")
-                    self.canvas.itemconfig(self.go_black_cover, stipple="gray12")  # simulate alpha via stipple
-                except Exception:
-                    pass
-            # Increase pseudo alpha
-            self.go_black_alpha += 0.06
-            # Adjust stipple pattern to simulate increasing opacity
-            if self.go_black_cover is not None:
-                # choose denser patterns as alpha rises
-                try:
-                    if self.go_black_alpha > 0.8:
-                        self.canvas.itemconfig(self.go_black_cover, stipple="")  # solid
-                    elif self.go_black_alpha > 0.6:
-                        self.canvas.itemconfig(self.go_black_cover, stipple="gray50")
-                    elif self.go_black_alpha > 0.4:
-                        self.canvas.itemconfig(self.go_black_cover, stipple="gray37")
-                    elif self.go_black_alpha > 0.2:
-                        self.canvas.itemconfig(self.go_black_cover, stipple="gray25")
-                except Exception:
-                    pass
-            # Occasionally delete lingering items beneath
-            if self.go_anim_frame % 9 == 0:
-                for item in self.canvas.find_all():
-                    # keep the black cover & game over text for now
-                    if item in (self.go_black_cover, self.go_anim_text):
-                        continue
-                    try: self.canvas.delete(item)
-                    except Exception: pass
-            if self.go_black_alpha >= 1.0:
-                # Remove text as screen fully blacks
-                try:
-                    if self.go_anim_text is not None:
-                        self.canvas.delete(self.go_anim_text)
-                        self.go_anim_text = None
-                    if self.go_anim_subtext is not None:
-                        self.canvas.delete(self.go_anim_subtext)
-                        self.go_anim_subtext = None
-                except Exception: pass
-                self.go_glitch_phase = 2
-        # --- Phase 2: Hold black, minimal updates ---
-        elif self.go_glitch_phase == 2:
-            # No further visuals; allow a restart key prompt optionally
-            if self.go_anim_frame % 40 == 0 and getattr(self, 'go_anim_text', None) is None:
-                try:
-                    self.go_anim_text = self.canvas.create_text(self.width//2, self.height//2, text="PRESS R TO RESTART", fill="#4444ff", font=("Arial", 24))
-                except Exception:
-                    pass
-        # Pulse text color / scale
-        if self.go_anim_text is not None:
-            phase = _sin(self.go_anim_frame * 0.18) * 0.5 + 0.5  # 0..1
-            # Interpolate color between magenta and white
-            def mix(a,b,t):
-                return int(a + (b-a)*t)
-            r = mix(255,255,phase)
-            g = mix(85,255,phase)
-            b = mix(255,255,phase)
-            try:
-                self.canvas.itemconfig(self.go_anim_text, fill=f"#{r:02x}{g:02x}{b:02x}")
+                        txt = self.canvas.create_text(self.width//2, self.height//2 + 60, text=f"+{bonus} REWIND BONUS", fill="#66ff99", font=("Arial", 28, "bold"))
+                        self.canvas.after(1200, lambda tid=txt: (self.canvas.delete(tid) if self.canvas.type(tid) else None))
+                    except Exception:
+                        pass
             except Exception:
                 pass
-        # Update particles
-        new_particles = []
-        for pid, vx, vy, life in self.go_anim_particles:
-            life -= 1
-            # Move
-            self.canvas.move(pid, vx, vy)
-            # Apply slight drag + outward drift aging effect
-            vx *= 0.96
-            vy *= 0.96 + 0.003
-            # Fade color based on remaining life
-            t = max(0.0, min(1.0, life/70))
-            # Fade from pink -> violet -> dark
-            fr = int(255 * t)
-            fg = int(55 + (20-55)*(1-t))  # narrow shift
-            fb = int(255 * t)
+            # Play end sound
             try:
-                self.canvas.itemconfig(pid, fill=f"#{fr:02x}{fg:02x}{fb:02x}")
+                if self._rewind_end_sound is None:
+                    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+                    p = os.path.join(base_dir, 'rewind_end.wav')
+                    if os.path.exists(p):
+                        self._rewind_end_sound = pygame.mixer.Sound(p)
+                if self._rewind_end_sound:
+                    self._rewind_end_sound.play()
             except Exception:
                 pass
-            if life > 0:
-                new_particles.append((pid, vx, vy, life))
+        # If freeze just ended and a rewind was pending, activate it now
+        if (not self.freeze_active) and self.rewind_pending and not self.rewind_active:
+            self.rewind_pending = False
+            self.activate_rewind(self._pending_rewind_duration)
+        # Update rewind countdown label
+        if self.rewind_active and self.rewind_text:
+            remaining = max(0.0, self.rewind_end_time - now)
+            try:
+                self.canvas.itemconfig(self.rewind_text, text=f"REWIND {remaining:0.1f}s")
+                self.canvas.lift(self.rewind_text)
+            except Exception:
+                pass
+        # Show queued rewind label if pending
+        if self.rewind_pending and not self.rewind_active:
+            if not self.rewind_pending_text:
+                try:
+                    self.rewind_pending_text = self.canvas.create_text(self.width//2, self.height//2 - 140, text="REWIND QUEUED", fill="#66ff99", font=("Arial", 24, "bold"))
+                except Exception:
+                    self.rewind_pending_text = None
             else:
-                self.canvas.delete(pid)
-        self.go_anim_particles = new_particles
-        # Stop after particles gone and some frames passed
-        if self.go_glitch_phase == 2 and self.go_anim_frame > 400:
-            # Stop updating; final blackout stable
-            self.go_anim_active = False
-            return
-        # Schedule next frame (decoupled from main game loop which is halted)
-        try:
-            self.root.after(50, self.update_game_over_animation)
-        except Exception:
-            pass
-
-    # -------- Registry Sync Helpers (Step 3 extended) --------
-    def _sync_registry_from_lists(self):
-        reg = getattr(self, '_bullet_registry', None)
-        if not reg:
-            return
-        have = reg.by_id
-        def reg_basic(item_id, kind, meta=None):
-            if item_id in have:
-                return
+                try: self.canvas.lift(self.rewind_pending_text)
+                except Exception: pass
+        else:
+            if self.rewind_pending_text and not self.rewind_active:
+                # If no longer pending (activated), it is cleared inside activate_rewind
+                pass
+        # Update freeze countdown text if active
+        if self.freeze_active and self.freeze_text:
+            remaining = max(0.0, self.freeze_end_time - now)
             try:
-                b = Bullet(item_id, kind)
-                if meta:
-                    b.extra.update(meta)
-                reg.register(b)
+                self.canvas.itemconfig(self.freeze_text, text=f"FREEZE {remaining:0.1f}s")
+                self.canvas.lift(self.freeze_text)
             except Exception:
                 pass
-        # Basic vertical & horizontal
-        for bid in self.bullets:
-            reg_basic(bid, 'vertical')
-        for bid in self.bullets2:
-            reg_basic(bid, 'horizontal')
-        # Directional (triangle/diag)
-        for bid, direction in self.triangle_bullets:
-            reg_basic(bid, 'triangle', {'direction': direction})
-        for bid, direction in self.diag_bullets:
-            reg_basic(bid, 'diag', {'direction': direction})
-        # Simple id lists
-        for lst, kind in [
-            (self.boss_bullets, 'boss'), (self.zigzag_bullets, 'zigzag'), (self.fast_bullets, 'fast'),
-            (self.star_bullets, 'star'), (self.rect_bullets, 'rect'), (self.egg_bullets, 'egg'),
-            (self.quad_bullets, 'quad'), (self.bouncing_bullets, 'bouncing'), (self.exploding_bullets, 'exploding')
-        ]:
-            for bid in lst:
-                reg_basic(bid, kind)
-        # Fragments
-        for bid, dx, dy in self.exploded_fragments:
-            reg_basic(bid, 'fragment', {'dx': dx, 'dy': dy})
-        # Homing
-        for bid, vx, vy in self.homing_bullets:
-            reg_basic(bid, 'homing', {'vx': vx, 'vy': vy})
-        # Spiral
-        for bid, angle, radius, ang_speed, rad_speed, cx, cy in self.spiral_bullets:
-            reg_basic(bid, 'spiral', {'angle': angle, 'radius': radius, 'ang_speed': ang_speed, 'rad_speed': rad_speed, 'cx': cx, 'cy': cy})
-        # Radial
-        for bid, vx, vy in self.radial_bullets:
-            reg_basic(bid, 'radial', {'vx': vx, 'vy': vy})
-        # Wave
-        for bid, base_x, phase, amp, vy, phase_speed in self.wave_bullets:
-            reg_basic(bid, 'wave', {'base_x': base_x, 'phase': phase, 'amp': amp, 'vy': vy, 'phase_speed': phase_speed})
-        # Boomerang
-        for bid, vy, timer, state in self.boomerang_bullets:
-            reg_basic(bid, 'boomerang', {'vy': vy, 'timer': timer, 'state': state})
-        # Split
-        for bid, timer in self.split_bullets:
-            reg_basic(bid, 'split', {'timer': timer})
-
-    def _prune_registry(self):
-        reg = getattr(self, '_bullet_registry', None)
-        if not reg:
-            return
-        for b in list(reg.bullets_all):
-            try:
-                if not self.canvas.type(b.item_id):
-                    reg.remove(b.item_id)
-            except Exception:
+        # Spawn/update freeze particles (slow drifting flakes) while frozen
+        if self.freeze_active:
+            # spawn a few each frame
+            for _ in range(3):
+                import random as _r
+                x = _r.randint(0, self.width)
+                y = _r.randint(0, self.height)
+                size = _r.randint(3,6)
                 try:
-                    reg.remove(b.item_id)
+                    pid = self.canvas.create_oval(x-size/2, y-size/2, x+size/2, y+size/2, fill="#c9f6ff", outline="")
+                except Exception:
+                    continue
+                vx = _r.uniform(-0.5,0.5)
+                vy = _r.uniform(0.2,0.8)
+                life = _r.randint(18,35)
+                self.freeze_particles.append((pid, vx, vy, life))
+            new_fp = []
+            for pid, vx, vy, life in self.freeze_particles:
+                life -= 1
+                try:
+                    self.canvas.move(pid, vx, vy)
+                    if life < 10:
+                        # fade via stipple swap if possible
+                        if life % 2 == 0:
+                            self.canvas.itemconfig(pid, fill="#99ddee")
+                    if life > 0:
+                        new_fp.append((pid, vx, vy, life))
+                    else:
+                        self.canvas.delete(pid)
                 except Exception:
                     pass
-
-    # -------- Bullet update dispatch (Step 4) --------
-    def _dispatch_update_kind(self, kind: str, **kwargs):
-        handler = self._bullet_handlers.get(kind)
-        if not handler:
-            return
-        # For now we still rely on legacy lists; later we'll iterate registry
-        if kind == 'vertical':
-            source = self.bullets
-        elif kind == 'horizontal':
-            source = self.bullets2
+            self.freeze_particles = new_fp
+        # Compute next unlock pattern
+        remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
+        if remaining_candidates:
+            # Pick soonest
+            pat, secs = min(remaining_candidates, key=lambda x: x[1])
+            display = self.pattern_display_names.get(pat, pat.title())
+            self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
         else:
-            source = []
-        # Copy to allow safe removal inside loop
-        for bid in source[:]:
-            handler(bid, source, **kwargs)
+            self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
 
-    def _update_vertical_bullet(self, bid, container, speed=7, **_):
-        try:
-            self.canvas.move(bid, 0, speed)
-        except Exception:
-            try: container.remove(bid)
-            except Exception: pass
+        # Centralized pattern spawning handled via registry after unlock scheduling
+        self._attempt_pattern_spawns(time_survived)
+
+        # --- Freeze power-up spawn (independent of bullet patterns) ---
+        # Only spawn if not currently active and limited number on screen
+        if not self.freeze_active and len(self.freeze_powerups) < 1:
+            # Roughly ~ one every ~45s expected (1 in 900 per 50ms frame)
+            if random.randint(1, 900) == 1:
+                self.spawn_freeze_powerup()
+        # --- Rewind power-up spawn ---
+        if not self.rewind_active and len(self.rewind_powerups) < 1:
+            # Rarer than freeze (approx one every ~70s)
+            if random.randint(1, 1400) == 1 and len(self._bullet_history) > 40:
+                self.spawn_rewind_powerup()
+
+        # Move existing freeze power-ups downward & check collection
+        for p_id in self.freeze_powerups[:]:
+            try:
+                self.canvas.move(p_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                bx1, by1, bx2, by2 = self.canvas.coords(p_id)
+                if bx2 < px1 or bx1 > px2 or by2 < py1 or by1 > py2:
+                    # no overlap
+                    pass
+                else:
+                    self.activate_freeze()
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+                    continue
+                # Remove if off screen
+                if by1 > self.height:
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+            except Exception:
+                try:
+                    self.freeze_powerups.remove(p_id)
+                except Exception:
+                    pass
+        # Move existing rewind power-ups & check collection
+        for r_id in self.rewind_powerups[:]:
+            try:
+                self.canvas.move(r_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                rx1, ry1, rx2, ry2 = self.canvas.coords(r_id)
+                               # collection overlap
+                if not (rx2 < px1 or rx1 > px2 or ry2 < py1 or ry1 > py2):
+                    self.activate_rewind()
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+                    continue
+                if ry1 > self.height:
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+            except Exception:
+                try: self.rewind_powerups.remove(r_id)
+                except Exception: pass
+
+        # (Per-pattern spawn logic migrated to registry earlier in update cycle)
+        # Capture bullet snapshot (post spawn) if not frozen or rewinding
+        if not self.freeze_active and not self.rewind_active:
+            try:
+                self._capture_bullet_snapshot()
+            except Exception:
+                pass
+
+        # If freeze is active, skip movement updates for bullets (they remain frozen in place)
+        if self.freeze_active:
+            self.root.after(50, self.update_game)
             return
-        # Collision
-        if self.check_collision(bid):
-            if not self.practice_mode:
+        if self.rewind_active:
+            # Rewind bullet positions instead of advancing
+            self._perform_rewind_step()
+            # Damage flash fade while rewinding
+            try: self._update_damage_flash()
+            except Exception: pass
+            self.root.after(50, self.update_game)
+            return
+        # Move triangle bullets
+        triangle_speed = 7
+
+        for bullet_tuple in self.triangle_bullets[:]:
+            bullet, direction = bullet_tuple
+            self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.paused = False
+                self.pause_text = None
+                self.triangle_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.triangle_bullets.remove(bullet_tuple)
+                    self.score += 2
+        # Move bouncing bullets
+        for bullet_tuple in self.bouncing_bullets[:]:
+            bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
+            self.canvas.move(bullet, x_velocity, y_velocity)
+            coords = self.canvas.coords(bullet)
+            bounced = False
+            # Bounce off left/right
+            if coords[0] <= 0 or coords[2] >= self.width:
+                x_velocity = -x_velocity
+                bounced = True
+            # Bounce off top/bottom
+            if coords[1] <= 0 or coords[3] >= self.height:
+                y_velocity = -y_velocity
+                bounced = True
+            if bounced:
+                bounces_left -= 1
+            # Remove bullet if out of bounces
+            if bounces_left < 0:
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove(bullet_tuple)
+                self.score += 2
+                continue
+            # Update tuple with new velocities and bounces
+            idx = self.bouncing_bullets.index(bullet_tuple)
+            self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
+            if self.check_collision(bullet):
                 self.lives -= 1
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
                 if self.lives <= 0:
                     self.end_game()
-            try: self.canvas.delete(bid)
-            except Exception: pass
-            try: container.remove(bid)
-            except Exception: pass
-            return
-        # Off screen
-        try:
-            if self.canvas.coords(bid)[1] > self.height:
-                try: self.canvas.delete(bid)
-                except Exception: pass
-                try: container.remove(bid)
-                except Exception: pass
+        # Move exploding bullets
+        for bullet in self.exploding_bullets[:]:
+            self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
+            coords = self.canvas.coords(bullet)
+            # Check if bullet reached middle of screen (y ~ self.height//2)
+            if coords and abs((coords[1] + coords[3]) / 2 - self.height // 2) < 20:
+                # Explode into 4 diagonal fragments
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                size = 12
+                directions = [(6, 6), (-6, 6), (6, -6), (-6, -6)]
+                for dx, dy in directions:
+                    frag = self.canvas.create_oval(bx-size//2, by-size//2, bx+size//2, by+size//2, fill="white")
+                    self.exploded_fragments.append((frag, dx, dy))
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                self.score += 2
+                continue
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                if coords and coords[1] > self.height:
+                    self.canvas.delete(bullet)
+                    self.exploding_bullets.remove(bullet)
+                    self.score += 2
+        # Move exploded fragments (diagonal bullets)
+        for frag_tuple in self.exploded_fragments[:]:
+            frag, dx, dy = frag_tuple
+            self.canvas.move(frag, dx, dy)
+            coords = self.canvas.coords(frag)
+            if self.check_collision(frag):
+                self.lives -= 1
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+            elif coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width or coords[3] < 0):
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
                 self.score += 1
-                return
-        except Exception:
-            return
-        # Graze
-        try:
-            if self.check_graze(bid) and bid not in self.grazed_bullets:
+            # Grazing check
+            if self.check_graze(frag) and frag not in self.grazed_bullets:
                 self.score += 1
-                self.grazed_bullets.add(bid)
+                self.grazed_bullets.add(frag)
+                self.show_graze_effect()
+        # Handle laser indicators
+        for indicator_tuple in self.laser_indicators[:]:
+            indicator_id, y, timer = indicator_tuple
+            timer -= 1
+            if timer <= 0:
+                self.canvas.delete(indicator_id)
+                # Spawn actual laser
+                laser_id = self.canvas.create_line(0, y, self.width, y, fill="red", width=8)
+                self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
+                self.laser_indicators.remove(indicator_tuple)
+            else:
+                idx = self.laser_indicators.index(indicator_tuple)
+                self.laser_indicators[idx] = (indicator_id, y, timer)
+
+        # Handle lasers
+        for laser_tuple in self.lasers[:]:
+            laser_id, y, timer = laser_tuple
+            timer -= 1
+            # Check collision with player
+            player_coords = self.canvas.coords(self.player)
+            if player_coords[1] <= y <= player_coords[3]:
+                self.lives -= 1
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+                continue
+            if timer <= 0:
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+            else:
+                idx = self.lasers.index(laser_tuple)
+                self.lasers[idx] = (laser_id, y, timer)
+
+        # Bullet speeds scale with difficulty
+        bullet_speed = 7
+        bullet2_speed = 7
+        diag_speed = 5
+        boss_speed = 10
+        zigzag_speed = 5
+        fast_speed = 14
+        star_speed = 8
+        rect_speed = 8
+        quad_speed = 7
+        egg_speed = 6
+        homing_speed = 6
+
+        # Dispatch-driven updates for some bullet kinds (Step 4)
+        self._dispatch_update_kind('vertical', speed=bullet_speed)
+        self._dispatch_update_kind('horizontal', speed=bullet2_speed, horizontal=True)
+
+        # Move egg bullets
+        for egg_bullet in self.egg_bullets[:]:
+            self.canvas.move(egg_bullet, 0, egg_speed)
+            if self.check_collision(egg_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+            elif self.canvas.coords(egg_bullet)[1] > self.height:
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(egg_bullet)
                 self.show_graze_effect()
                 if self.focus_active:
                     self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
-        except Exception:
-            pass
 
-    def _update_horizontal_bullet(self, bid, container, speed=7, horizontal=False, **_):
-        try:
-            self.canvas.move(bid, speed, 0)
-        except Exception:
-            try: container.remove(bid)
-            except Exception: pass
-            return
-        if self.check_collision(bid):
-            if not self.practice_mode:
-                self.lives -= 1
-                if self.lives <= 0:
-                    self.end_game()
-            try: self.canvas.delete(bid)
-            except Exception: pass
-            try: container.remove(bid)
-            except Exception: pass
-            return
-        try:
-            if self.canvas.coords(bid)[0] > self.width:
-                try: self.canvas.delete(bid)
-                except Exception: pass
-                try: container.remove(bid)
-                except Exception: pass
+        # Move diagonal bullets
+        for bullet_tuple in self.diag_bullets[:]:
+            dbullet, direction = bullet_tuple
+            self.canvas.move(dbullet, diag_speed * direction, diag_speed)
+            if self.check_collision(dbullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+            elif self.canvas.coords(dbullet)[1] > self.height:
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
                 self.score += 1
-                return
-        except Exception:
-            return
-        try:
-            if self.check_graze(bid) and bid not in self.grazed_bullets:
-                self.score += 1
-                self.grazed_bullets.add(bid)
+                self.grazed_bullets.add(dbullet)
                 self.show_graze_effect()
                 if self.focus_active:
                     self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
+
+        # Move boss bullets
+        for boss_bullet in self.boss_bullets[:]:
+            self.canvas.move(boss_bullet, 0, boss_speed)
+            if self.check_collision(boss_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+            elif self.canvas.coords(boss_bullet)[1] > self.height:
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+                self.score += 5  # Boss bullets give more score
+            # Grazing check
+            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
+                self.score += 2
+                self.grazed_bullets.add(boss_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move quad bullets
+        for bullet in self.quad_bullets[:]:
+            self.canvas.move(bullet, 0, quad_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+            elif self.canvas.coords(bullet)[1] > self.height:
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move zigzag bullets
+        for bullet_tuple in self.zigzag_bullets[:]:
+            bullet, direction, step_count = bullet_tuple
+            # Change direction every 10 steps
+            if step_count % 10 == 0:
+                direction *= -1
+            self.canvas.move(bullet, 5 * direction, zigzag_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.zigzag_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.zigzag_bullets.remove(bullet_tuple)
+                    self.score += 2
+                else:
+                    # Update tuple with incremented step_count and possibly new direction
+                    idx = self.zigzag_bullets.index(bullet_tuple)
+                    self.zigzag_bullets[idx] = (bullet, direction, step_count + 1)
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move fast bullets
+        for fast_bullet in self.fast_bullets[:]:
+            self.canvas.move(fast_bullet, 0, fast_speed)
+            if self.check_collision(fast_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+            elif self.canvas.coords(fast_bullet)[1] > self.height:
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(fast_bullet) and fast_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(fast_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move & spin star bullets
+        for star_bullet in self.star_bullets[:]:
+            # Fall movement
+            self.canvas.move(star_bullet, 0, star_speed)
+            # Spin: fetch current coords, rotate around center by small angle
+            coords = self.canvas.coords(star_bullet)
+            if len(coords) >= 6:  # polygon
+                # Compute center
+                xs = coords[0::2]
+                ys = coords[1::2]
+                cx = sum(xs)/len(xs)
+                cy = sum(ys)/len(ys)
+                angle = 0.18  # radians per frame
+                sin_a = _sin(angle)
+                cos_a = _cos(angle)
+                new_pts = []
+                for x, y in zip(xs, ys):
+                    dx = x - cx
+                    dy = y - cy
+                    rx = dx * cos_a - dy * sin_a + cx
+                    ry = dx * sin_a + dy * cos_a + cy
+                    new_pts.extend([rx, ry])
+                self.canvas.coords(star_bullet, *new_pts)
+            # Collision / bounds / graze
+            if self.check_collision(star_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                continue
+            # Off screen
+            bbox = self.canvas.bbox(star_bullet)
+            if bbox and bbox[1] > self.height:
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                self.score += 3
+                continue
+            # Grazing
+            if self.check_graze(star_bullet) and star_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(star_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move rectangle bullets
+        for rect_bullet in self.rect_bullets[:]:
+            self.canvas.move(rect_bullet, 0, rect_speed)
+            if self.check_collision(rect_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+            elif self.canvas.coords(rect_bullet)[1] > self.height:
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(rect_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move homing bullets ----------------
+        for hb_tuple in self.homing_bullets[:]:
+            # Backward compatibility: allow old 3-tuple
+            if len(hb_tuple) == 3:
+                bullet, vx, vy = hb_tuple
+                life = self.homing_bullet_max_life
+            else:
+                bullet, vx, vy, life = hb_tuple
+            # Compute vector toward player center
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2)/2
+            pcy = (py1 + py2)/2
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            bcx = (bx1 + bx2)/2
+            bcy = (by1 + by2)/2
+            dx = pcx - bcx
+            dy = pcy - bcy
+           
+            dist = _hypot(dx, dy) or 1
+            # Normalize and apply steering (lerp velocities)
+            target_vx = dx / dist * homing_speed
+            target_vy = dy / dist * homing_speed
+            steer_factor = 0.15  # how quickly it turns
+            vx = vx * (1 - steer_factor) + target_vx * steer_factor
+            vy = vy * (1 - steer_factor) + target_vy * steer_factor
+            self.canvas.move(bullet, vx, vy)
+            life -= 1
+            # Update tuple (store life)
+            idx = self.homing_bullets.index(hb_tuple)
+            self.homing_bullets[idx] = (bullet, vx, vy, life)
+            # Collision / out of bounds
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.homing_bullets.remove(self.homing_bullets[idx])
+            else:
+                coords = self.canvas.coords(bullet)
+                if (coords and (coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0)):
+                    try:
+                        self.canvas.delete(bullet)
+                    except Exception:
+                        pass
+                    # Remove using safe search if idx stale
+                    try:
+                        self.homing_bullets.remove(self.homing_bullets[idx])
+                    except Exception:
+                        # fallback linear remove by id match
+                        for _t in self.homing_bullets:
+                            if _t[0] == bullet:
+                                self.homing_bullets.remove(_t)
+                                break
+                    self.score += 3
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move spiral bullets ----------------
+        for sp_tuple in self.spiral_bullets[:]:
+            bullet, angle, radius, ang_speed, rad_speed, cx, cy = sp_tuple
+            angle += ang_speed
+            radius += rad_speed
+            x = cx + _cos(angle) * radius
+            y = cy + _sin(angle) * radius
+            size = 20
+            self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
+            # Collision & removal
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                continue
+            if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                self.score += 2
+                continue
+            # Update tuple
+            idx = self.spiral_bullets.index(sp_tuple)
+            self.spiral_bullets[idx] = (bullet, angle, radius, ang_speed, rad_speed, cx, cy)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move radial burst bullets ----------------
+        for rb_tuple in self.radial_bullets[:]:
+            bullet, vx, vy = rb_tuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                self.score += 1
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move wave bullets ----------------
+        for wtuple in self.wave_bullets[:]:
+            bullet, base_x, phase, amp, vy, phase_speed = wtuple
+            phase += phase_speed
+            # Get current bullet coords to compute center y
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            height = by2 - by1
+            # Vertical move
+            self.canvas.move(bullet, 0, vy)
+            # Recompute center after vertical move
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            cy = (by1 + by2)/2
+            cx = base_x + _sin(phase) * amp
+            size = bx2 - bx1
+            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+size/2)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                continue
+            if cy > self.height + 30:
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                self.score += 2
+                continue
+            idx = self.wave_bullets.index(wtuple)
+            self.wave_bullets[idx] = (bullet, base_x, phase, amp, vy, phase_speed)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move boomerang bullets ----------------
+        for btuple in self.boomerang_bullets[:]:
+            bullet, vy, timer, state = btuple
+            if state == 'down':
+                self.canvas.move(bullet, 0, vy)
+                timer -= 1
+                if timer <= 0:
+                    state = 'up'
+            else:  # up
+                self.canvas.move(bullet, 0, -vy*0.8)
+            coords = self.canvas.coords(bullet)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                continue
+            if not coords or coords[3] < -30 or coords[1] > self.height + 40:
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                self.score += 3
+                continue
+            idx = self.boomerang_bullets.index(btuple)
+            self.boomerang_bullets[idx] = (bullet, vy, timer, state)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move split bullets ----------------
+        for stuple in self.split_bullets[:]:
+            bullet, timer = stuple
+            self.canvas.move(bullet, 0, 5 + self.difficulty/4)
+            timer -= 1
+            coords = self.canvas.coords(bullet)
+            if timer <= 0 and coords:
+                # Split into fragments (6) moving outward in a circle
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                frag_count = 6
+                frag_speed = 4 + self.difficulty/5
+                for i in range(frag_count):
+                    ang = (2*math.pi/frag_count)*i
+                    vx = _cos(ang) * frag_speed
+                    vy2 = _sin(ang) * frag_speed
+                    frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
+                    self.radial_bullets.append((frag, vx, vy2))
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 3
+                continue
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                continue
+            if coords and coords[1] > self.height:
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 2
+                continue
+            idx = self.split_bullets.index(stuple)
+            self.split_bullets[idx] = (bullet, timer)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Mid-screen lore fragment display (spawn + blink + expire)
+        try:
+            if hasattr(self, 'maybe_show_mid_lore'):
+                self.maybe_show_mid_lore()
+            if getattr(self, '_mid_lore_items', None) is not None:
+                for item in self._mid_lore_items[:]:
+                    ids = item.get('ids', [])
+                    life = item.get('life', 0)
+                    life -= 1
+                    item['life'] = life
+                    # Blink during final 15 frames
+                    if life < 15:
+                        blink_hidden = (life % 4) in (0,1)
+                        state = 'hidden' if blink_hidden else 'normal'
+                        for oid in ids:
+                            try: self.canvas.itemconfig(oid, state=state)
+                            except Exception: pass
+                    if life <= 0:
+                        for oid in ids:
+                            try: self.canvas.delete(oid)
+                            except Exception: pass
+                        self._mid_lore_items.remove(item)
         except Exception:
             pass
-if __name__ == "__main__":
-    root = tk.Tk()
-    game = bullet_hell_game(root)
-    root.mainloop()
+
+        # Update damage flash visuals (overlay & flicker)
+        try:
+            self._update_damage_flash()
+        except Exception:
+            pass
+        self.root.after(50, self.update_game)
+        # Update Debug HUD late so counts reflect this frame's state
+        if self.debug_hud_enabled:
+            self._update_debug_hud()
+
+    # ---------------- Focus / Pulse mechanic helpers ----------------
+    def _focus_key_pressed(self, event=None):
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
+            return
+        if self.focus_overheat_locked:
+            return
+        self.focus_active = True
+
+    def _focus_key_released(self, event=None):
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
+            self._trigger_focus_pulse()
+        self.focus_active = False
+
+    def _trigger_focus_pulse(self):
+        # Visual ring
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1+px2)/2; cy = (py1+py2)/2
+            ring = self.canvas.create_oval(cx-10, cy-10, cx+10, cy+10, outline="#66ffff", width=3)
+            self.focus_pulse_visuals.append((ring, 0))  # (id, life)
+        except Exception:
+            pass
+        # Affect bullets within radius: simple delete for now
+        removed = 0
+        radius2 = self.focus_pulse_radius ** 2
+        for coll in [self.bullets, self.bullets2, self.triangle_bullets, self.diag_bullets, self.boss_bullets, self.zigzag_bullets, self.fast_bullets,
+                     self.star_bullets, self.rect_bullets, self.egg_bullets, self.quad_bullets, self.exploding_bullets, self.bouncing_bullets]:
+            for entry in coll[:]:
+                bid = entry[0] if isinstance(entry, tuple) else entry
+                try:
+                    c = self.canvas.coords(bid)
+                    if not c:
+                        continue
+                    if len(c) == 4:
+                        bx = (c[0]+c[2])/2; by = (c[1]+c[3])/2
+                    else:
+                        xs=c[0::2]; ys=c[1::2]
+                        bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
+                    dx = bx - cx; dy = by - cy
+                    if dx*dx + dy*dy <= radius2:
+                        self.canvas.delete(bid)
+                        coll.remove(entry)
+                        removed += 1
+                except Exception:
+                    pass
+        # Score reward
+        self.score += removed
+        # Reset focus charge & overheat decay
+        self.focus_charge = 0.0
+        self.focus_charge_ready = False
+        self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_decay_on_pulse)
+        self.focus_pulse_cooldown = self.focus_pulse_cooldown_time
+
+    def _update_focus_visuals(self):
+        new=[]
+        for rid, life in self.focus_pulse_visuals:
+            life += 1
+            try:
+                # expand & fade
+                x1,y1,x2,y2 = self.canvas.coords(rid)
+                cx=(x1+x2)/2; cy=(y1+y2)/2
+                growth=18
+                self.canvas.coords(rid, cx-growth-life*4, cy-growth-life*4, cx+growth+life*4, cy+growth+life*4)
+                if life % 2 == 0:
+                    self.canvas.itemconfig(rid, outline="#99ffff")
+            except Exception:
+                continue
+            if life < 12:
+                new.append((rid, life))
+            else:
+                try: self.canvas.delete(rid)
+                except Exception: pass
+        self.focus_pulse_visuals = new
+
+    def _update_focus_charge(self):
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
+            return
+        now = time.time()
+        # Unlock if lock expired
+        if self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+            self.focus_overheat_locked = False
+        # Charging phase
+        if self.focus_active and not self.focus_charge_ready and not self.focus_overheat_locked:
+            if self.focus_pulse_cooldown <= 0:
+                self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_rate)
+                if self.focus_charge >= self.focus_charge_threshold:
+                    self.focus_charge_ready = True
+        # Overheat accumulation
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
+            self.focus_overheat = min(1.0, self.focus_overheat + self.focus_overheat_rate)
+            if self.focus_overheat >= 1.0:
+                self.focus_overheat_locked = True
+                self.focus_overheat_lock_until = now + 3.0
+                self.focus_active = False
+        # Passive cooldown
+        if not self.focus_active or self.focus_overheat_locked:
+            if self.focus_overheat > 0:
+                self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_cool_rate)
+                if self.focus_overheat <= 0 and self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+                    self.focus_overheat_locked = False
+
+    # Override / extend existing update_game by injecting focus + HUD + i-frames hooks
+    def update_game(self):
+        if self.game_over:
+            return
+        if self.paused:
+            return
+        # Frame timing capture for Debug HUD
+        try:
+            now_perf = time.perf_counter()
+            if hasattr(self, '_last_frame_time_stamp'):
+                dt_ms = (now_perf - self._last_frame_time_stamp) * 1000.0
+                self._frame_time_buffer.append(dt_ms)
+            self._last_frame_time_stamp = now_perf
+        except Exception:
+            pass
+        # Update focus pulse cooldown timer (wall time based)
+        if self.focus_pulse_cooldown > 0:
+            self.focus_pulse_cooldown -= 0.05  # approx frame duration
+            if self.focus_pulse_cooldown < 0:
+                self.focus_pulse_cooldown = 0
+        # Update focus charge accumulation & visuals
+        self._update_focus_charge()
+        self._update_focus_visuals()
+    # (Removed controller polling)
+    # Background animation
+        self.update_background()
+    # Animate player decorative sprite
+        self.animate_player_sprite()
+        self.canvas.lift(self.dialog)
+        self.canvas.lift(self.scorecount)
+        self.canvas.lift(self.timecount)
+        if hasattr(self, 'next_unlock_text'):
+            self.canvas.lift(self.next_unlock_text)
+        # Move graze effect to follow player if active
+        if self.graze_effect_id:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            self.canvas.coords(
+                self.graze_effect_id,
+                cx - self.grazing_radius, cy - self.grazing_radius,
+                cx + self.grazing_radius, cy + self.grazing_radius
+            )
+            self.graze_effect_timer -= 1
+            if self.graze_effect_timer <= 0:
+                self.canvas.delete(self.graze_effect_id)
+                self.graze_effect_id = None
+        # Increase difficulty every 60 seconds
+        now = time.time()
+    # Difficulty scaling removed
+        if now - self.lastdial > 10:
+            self.get_dialog_string()
+            self.lastdial = now
+            self.canvas.itemconfig(self.dialog, text=self.dial)
+        # Lore rotation
+        if getattr(self, 'lore_text', None) is not None and now - getattr(self, 'lore_last_change', 0) >= getattr(self, 'lore_interval', 8):
+            self.update_lore_line()
+        # Calculate time survived, pausable
+        time_survived = int(now - self.timee - self.paused_time_total)
+        self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
+        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Update health HUD each frame
+        if getattr(self, 'health_text', None) is not None:
+            try:
+                self.canvas.itemconfig(self.health_text, text=f"HP: {max(0, self.lives)}")
+                self.canvas.lift(self.health_text)
+            except Exception:
+                pass
+        # Synchronize unified bullet registry with legacy lists (Step 3 enhancement)
+        if hasattr(self, '_bullet_registry'):
+            try:
+                self._sync_registry_from_lists()
+                self._prune_registry()
+            except Exception:
+                pass
+        # Handle freeze expiration
+        if self.freeze_active and now >= self.freeze_end_time:
+            self.freeze_active = False
+            if self.freeze_text:
+                try:
+                    self.canvas.delete(self.freeze_text)
+                except Exception:
+                    pass
+                self.freeze_text = None
+            # Remove overlay & particles
+            if self.freeze_overlay:
+                try: self.canvas.delete(self.freeze_overlay)
+                except Exception: pass
+                self.freeze_overlay = None
+            for pid, *_ in self.freeze_particles:
+                try: self.canvas.delete(pid)
+                except Exception: pass
+            self.freeze_particles.clear()
+            # Restore bullet colors
+            self._tint_all_bullets(freeze=False)
+            # Spawn shatter burst effect from each bullet to show reactivation
+            self._spawn_unfreeze_shatter()
+        # Handle rewind expiration
+        if self.rewind_active and now >= self.rewind_end_time:
+            self.rewind_active = False
+            self._rewind_pointer = None
+            if self.rewind_text:
+                try: self.canvas.delete(self.rewind_text)
+                except Exception: pass
+                self.rewind_text = None
+            if self._rewind_overlay:
+                try: self.canvas.delete(self._rewind_overlay)
+                except Exception: pass
+                self._rewind_overlay = None
+            # Clear vignette
+            self._clear_rewind_vignette()
+            # Award score bonus based on bullet count at start
+            try:
+                bonus = int(self._rewind_start_bullet_count * self._rewind_bonus_factor)
+                if bonus > 0:
+                    self.score += bonus
+                    # transient floating text
+                    try:
+                        txt = self.canvas.create_text(self.width//2, self.height//2 + 60, text=f"+{bonus} REWIND BONUS", fill="#66ff99", font=("Arial", 28, "bold"))
+                        self.canvas.after(1200, lambda tid=txt: (self.canvas.delete(tid) if self.canvas.type(tid) else None))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # Play end sound
+            try:
+                if self._rewind_end_sound is None:
+                    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+                    p = os.path.join(base_dir, 'rewind_end.wav')
+                    if os.path.exists(p):
+                        self._rewind_end_sound = pygame.mixer.Sound(p)
+                if self._rewind_end_sound:
+                    self._rewind_end_sound.play()
+            except Exception:
+                pass
+        # If freeze just ended and a rewind was pending, activate it now
+        if (not self.freeze_active) and self.rewind_pending and not self.rewind_active:
+            self.rewind_pending = False
+            self.activate_rewind(self._pending_rewind_duration)
+        # Update rewind countdown label
+        if self.rewind_active and self.rewind_text:
+            remaining = max(0.0, self.rewind_end_time - now)
+            try:
+                self.canvas.itemconfig(self.rewind_text, text=f"REWIND {remaining:0.1f}s")
+                self.canvas.lift(self.rewind_text)
+            except Exception:
+                pass
+        # Show queued rewind label if pending
+        if self.rewind_pending and not self.rewind_active:
+            if not self.rewind_pending_text:
+                try:
+                    self.rewind_pending_text = self.canvas.create_text(self.width//2, self.height//2 - 140, text="REWIND QUEUED", fill="#66ff99", font=("Arial", 24, "bold"))
+                except Exception:
+                    self.rewind_pending_text = None
+            else:
+                try: self.canvas.lift(self.rewind_pending_text)
+                except Exception: pass
+        else:
+            if self.rewind_pending_text and not self.rewind_active:
+                # If no longer pending (activated), it is cleared inside activate_rewind
+                pass
+        # Update freeze countdown text if active
+        if self.freeze_active and self.freeze_text:
+            remaining = max(0.0, self.freeze_end_time - now)
+            try:
+                self.canvas.itemconfig(self.freeze_text, text=f"FREEZE {remaining:0.1f}s")
+                self.canvas.lift(self.freeze_text)
+            except Exception:
+                pass
+        # Spawn/update freeze particles (slow drifting flakes) while frozen
+        if self.freeze_active:
+            # spawn a few each frame
+            for _ in range(3):
+                import random as _r
+                x = _r.randint(0, self.width)
+                y = _r.randint(0, self.height)
+                size = _r.randint(3,6)
+                try:
+                    pid = self.canvas.create_oval(x-size/2, y-size/2, x+size/2, y+size/2, fill="#c9f6ff", outline="")
+                except Exception:
+                    continue
+                vx = _r.uniform(-0.5,0.5)
+                vy = _r.uniform(0.2,0.8)
+                life = _r.randint(18,35)
+                self.freeze_particles.append((pid, vx, vy, life))
+            new_fp = []
+            for pid, vx, vy, life in self.freeze_particles:
+                life -= 1
+                try:
+                    self.canvas.move(pid, vx, vy)
+                    if life < 10:
+                        # fade via stipple swap if possible
+                        if life % 2 == 0:
+                            self.canvas.itemconfig(pid, fill="#99ddee")
+                    if life > 0:
+                        new_fp.append((pid, vx, vy, life))
+                    else:
+                        self.canvas.delete(pid)
+                except Exception:
+                    pass
+            self.freeze_particles = new_fp
+        # Compute next unlock pattern
+        remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
+        if remaining_candidates:
+            # Pick soonest
+            pat, secs = min(remaining_candidates, key=lambda x: x[1])
+            display = self.pattern_display_names.get(pat, pat.title())
+            self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
+        else:
+            self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
+
+        # Centralized pattern spawning handled via registry after unlock scheduling
+        self._attempt_pattern_spawns(time_survived)
+
+        # --- Freeze power-up spawn (independent of bullet patterns) ---
+        # Only spawn if not currently active and limited number on screen
+        if not self.freeze_active and len(self.freeze_powerups) < 1:
+            # Roughly ~ one every ~45s expected (1 in 900 per 50ms frame)
+            if random.randint(1, 900) == 1:
+                self.spawn_freeze_powerup()
+        # --- Rewind power-up spawn ---
+        if not self.rewind_active and len(self.rewind_powerups) < 1:
+            # Rarer than freeze (approx one every ~70s)
+            if random.randint(1, 1400) == 1 and len(self._bullet_history) > 40:
+                self.spawn_rewind_powerup()
+
+        # Move existing freeze power-ups downward & check collection
+        for p_id in self.freeze_powerups[:]:
+            try:
+                self.canvas.move(p_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                bx1, by1, bx2, by2 = self.canvas.coords(p_id)
+                if bx2 < px1 or bx1 > px2 or by2 < py1 or by1 > py2:
+                    # no overlap
+                    pass
+                else:
+                    self.activate_freeze()
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+                    continue
+                # Remove if off screen
+                if by1 > self.height:
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+            except Exception:
+                try:
+                    self.freeze_powerups.remove(p_id)
+                except Exception:
+                    pass
+        # Move existing rewind power-ups & check collection
+        for r_id in self.rewind_powerups[:]:
+            try:
+                self.canvas.move(r_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                rx1, ry1, rx2, ry2 = self.canvas.coords(r_id)
+                # collection overlap
+                if not (rx2 < px1 or rx1 > px2 or ry2 < py1 or ry1 > py2):
+                    self.activate_rewind()
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+                    continue
+                if ry1 > self.height:
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+            except Exception:
+                try: self.rewind_powerups.remove(r_id)
+                except Exception: pass
+
+        # (Per-pattern spawn logic migrated to registry earlier in update cycle)
+        # Capture bullet snapshot (post spawn) if not frozen or rewinding
+        if not self.freeze_active and not self.rewind_active:
+            try:
+                self._capture_bullet_snapshot()
+            except Exception:
+                pass
+
+        # If freeze is active, skip movement updates for bullets (they remain frozen in place)
+        if self.freeze_active:
+            self.root.after(50, self.update_game)
+            return
+        if self.rewind_active:
+            # Rewind bullet positions instead of advancing
+            self._perform_rewind_step()
+            # Damage flash fade while rewinding
+            try: self._update_damage_flash()
+            except Exception: pass
+            self.root.after(50, self.update_game)
+            return
+        # Move triangle bullets
+        triangle_speed = 7
+
+        for bullet_tuple in self.triangle_bullets[:]:
+            bullet, direction = bullet_tuple
+            self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.paused = False
+                self.pause_text = None
+                self.triangle_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.triangle_bullets.remove(bullet_tuple)
+                    self.score += 2
+        # Move bouncing bullets
+        for bullet_tuple in self.bouncing_bullets[:]:
+            bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
+            self.canvas.move(bullet, x_velocity, y_velocity)
+            coords = self.canvas.coords(bullet)
+            bounced = False
+            # Bounce off left/right
+            if coords[0] <= 0 or coords[2] >= self.width:
+                x_velocity = -x_velocity
+                bounced = True
+            # Bounce off top/bottom
+            if coords[1] <= 0 or coords[3] >= self.height:
+                y_velocity = -y_velocity
+                bounced = True
+            if bounced:
+                bounces_left -= 1
+            # Remove bullet if out of bounces
+            if bounces_left < 0:
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove(bullet_tuple)
+                self.score += 2
+                continue
+            # Update tuple with new velocities and bounces
+            idx = self.bouncing_bullets.index(bullet_tuple)
+            self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
+                if self.lives <= 0:
+                    self.end_game()
+        # Move exploding bullets
+        for bullet in self.exploding_bullets[:]:
+            self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
+            coords = self.canvas.coords(bullet)
+            # Check if bullet reached middle of screen (y ~ self.height//2)
+            if coords and abs((coords[1] + coords[3]) / 2 - self.height // 2) < 20:
+                # Explode into 4 diagonal fragments
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                size = 12
+                directions = [(6, 6), (-6, 6), (6, -6), (-6, -6)]
+                for dx, dy in directions:
+                    frag = self.canvas.create_oval(bx-size//2, by-size//2, bx+size//2, by+size//2, fill="white")
+                    self.exploded_fragments.append((frag, dx, dy))
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                self.score += 2
+                continue
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                if coords and coords[1] > self.height:
+                    self.canvas.delete(bullet)
+                    self.exploding_bullets.remove(bullet)
+                    self.score += 2
+        # Move exploded fragments (diagonal bullets)
+        for frag_tuple in self.exploded_fragments[:]:
+            frag, dx, dy = frag_tuple
+            self.canvas.move(frag, dx, dy)
+            coords = self.canvas.coords(frag)
+            if self.check_collision(frag):
+                self.lives -= 1
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+            elif coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width or coords[3] < 0):
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                self.score += 1
+            # Grazing check
+            if self.check_graze(frag) and frag not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(frag)
+                self.show_graze_effect()
+        # Handle laser indicators
+        for indicator_tuple in self.laser_indicators[:]:
+            indicator_id, y, timer = indicator_tuple
+            timer -= 1
+            if timer <= 0:
+                self.canvas.delete(indicator_id)
+                # Spawn actual laser
+                laser_id = self.canvas.create_line(0, y, self.width, y, fill="red", width=8)
+                self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
+                self.laser_indicators.remove(indicator_tuple)
+            else:
+                idx = self.laser_indicators.index(indicator_tuple)
+                self.laser_indicators[idx] = (indicator_id, y, timer)
+
+        # Handle lasers
+        for laser_tuple in self.lasers[:]:
+            laser_id, y, timer = laser_tuple
+            timer -= 1
+            # Check collision with player
+            player_coords = self.canvas.coords(self.player)
+            if player_coords[1] <= y <= player_coords[3]:
+                self.lives -= 1
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+                continue
+            if timer <= 0:
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+            else:
+                idx = self.lasers.index(laser_tuple)
+                self.lasers[idx] = (laser_id, y, timer)
+
+        # Bullet speeds scale with difficulty
+        bullet_speed = 7
+        bullet2_speed = 7
+        diag_speed = 5
+        boss_speed = 10
+        zigzag_speed = 5
+        fast_speed = 14
+        star_speed = 8
+        rect_speed = 8
+        quad_speed = 7
+        egg_speed = 6
+        homing_speed = 6
+
+        # Dispatch-driven updates for some bullet kinds (Step 4)
+        self._dispatch_update_kind('vertical', speed=bullet_speed)
+        self._dispatch_update_kind('horizontal', speed=bullet2_speed, horizontal=True)
+
+        # Move egg bullets
+        for egg_bullet in self.egg_bullets[:]:
+            self.canvas.move(egg_bullet, 0, egg_speed)
+            if self.check_collision(egg_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+            elif self.canvas.coords(egg_bullet)[1] > self.height:
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(egg_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move diagonal bullets
+        for bullet_tuple in self.diag_bullets[:]:
+            dbullet, direction = bullet_tuple
+            self.canvas.move(dbullet, diag_speed * direction, diag_speed)
+            if self.check_collision(dbullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+            elif self.canvas.coords(dbullet)[1] > self.height:
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(dbullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move boss bullets
+        for boss_bullet in self.boss_bullets[:]:
+            self.canvas.move(boss_bullet, 0, boss_speed)
+            if self.check_collision(boss_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+            elif self.canvas.coords(boss_bullet)[1] > self.height:
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+                self.score += 5  # Boss bullets give more score
+            # Grazing check
+            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
+                self.score += 2
+                self.grazed_bullets.add(boss_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move quad bullets
+        for bullet in self.quad_bullets[:]:
+            self.canvas.move(bullet, 0, quad_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+            elif self.canvas.coords(bullet)[1] > self.height:
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move zigzag bullets
+        for bullet_tuple in self.zigzag_bullets[:]:
+            bullet, direction, step_count = bullet_tuple
+            # Change direction every 10 steps
+            if step_count % 10 == 0:
+                direction *= -1
+            self.canvas.move(bullet, 5 * direction, zigzag_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.zigzag_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.zigzag_bullets.remove(bullet_tuple)
+                    self.score += 2
+                else:
+                    # Update tuple with incremented step_count and possibly new direction
+                    idx = self.zigzag_bullets.index(bullet_tuple)
+                    self.zigzag_bullets[idx] = (bullet, direction, step_count + 1)
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move fast bullets
+        for fast_bullet in self.fast_bullets[:]:
+            self.canvas.move(fast_bullet, 0, fast_speed)
+            if self.check_collision(fast_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+            elif self.canvas.coords(fast_bullet)[1] > self.height:
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(fast_bullet) and fast_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(fast_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move & spin star bullets
+        for star_bullet in self.star_bullets[:]:
+            # Fall movement
+            self.canvas.move(star_bullet, 0, star_speed)
+            # Spin: fetch current coords, rotate around center by small angle
+            coords = self.canvas.coords(star_bullet)
+            if len(coords) >= 6:  # polygon
+                # Compute center
+                xs = coords[0::2]
+                ys = coords[1::2]
+                cx = sum(xs)/len(xs)
+                cy = sum(ys)/len(ys)
+                angle = 0.18  # radians per frame
+                sin_a = _sin(angle)
+                cos_a = _cos(angle)
+                new_pts = []
+                for x, y in zip(xs, ys):
+                    dx = x - cx
+                    dy = y - cy
+                    rx = dx * cos_a - dy * sin_a + cx
+                    ry = dx * sin_a + dy * cos_a + cy
+                    new_pts.extend([rx, ry])
+                self.canvas.coords(star_bullet, *new_pts)
+            # Collision / bounds / graze
+            if self.check_collision(star_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                continue
+            # Off screen
+            bbox = self.canvas.bbox(star_bullet)
+            if bbox and bbox[1] > self.height:
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                self.score += 3
+                continue
+            # Grazing
+            if self.check_graze(star_bullet) and star_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(star_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move rectangle bullets
+        for rect_bullet in self.rect_bullets[:]:
+            self.canvas.move(rect_bullet, 0, rect_speed)
+            if self.check_collision(rect_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+            elif self.canvas.coords(rect_bullet)[1] > self.height:
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(rect_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move homing bullets ----------------
+        for hb_tuple in self.homing_bullets[:]:
+            # Backward compatibility: allow old 3-tuple
+            if len(hb_tuple) == 3:
+                bullet, vx, vy = hb_tuple
+                life = self.homing_bullet_max_life
+            else:
+                bullet, vx, vy, life = hb_tuple
+            # Compute vector toward player center
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2)/2
+            pcy = (py1 + py2)/2
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            bcx = (bx1 + bx2)/2
+            bcy = (by1 + by2)/2
+            dx = pcx - bcx
+            dy = pcy - bcy
+           
+            dist = _hypot(dx, dy) or 1
+            # Normalize and apply steering (lerp velocities)
+            target_vx = dx / dist * homing_speed
+            target_vy = dy / dist * homing_speed
+            steer_factor = 0.15  # how quickly it turns
+            vx = vx * (1 - steer_factor) + target_vx * steer_factor
+            vy = vy * (1 - steer_factor) + target_vy * steer_factor
+            self.canvas.move(bullet, vx, vy)
+            life -= 1
+            # Update tuple (store life)
+            idx = self.homing_bullets.index(hb_tuple)
+            self.homing_bullets[idx] = (bullet, vx, vy, life)
+            # Collision / out of bounds
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.homing_bullets.remove(self.homing_bullets[idx])
+            else:
+                coords = self.canvas.coords(bullet)
+                if (coords and (coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0)):
+                    try:
+                        self.canvas.delete(bullet)
+                    except Exception:
+                        pass
+                    # Remove using safe search if idx stale
+                    try:
+                        self.homing_bullets.remove(self.homing_bullets[idx])
+                    except Exception:
+                        # fallback linear remove by id match
+                        for _t in self.homing_bullets:
+                            if _t[0] == bullet:
+                                self.homing_bullets.remove(_t)
+                                break
+                    self.score += 3
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move spiral bullets ----------------
+        for sp_tuple in self.spiral_bullets[:]:
+            bullet, angle, radius, ang_speed, rad_speed, cx, cy = sp_tuple
+            angle += ang_speed
+            radius += rad_speed
+            x = cx + _cos(angle) * radius
+            y = cy + _sin(angle) * radius
+            size = 20
+            self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
+            # Collision & removal
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                continue
+            if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                self.score += 2
+                continue
+            # Update tuple
+            idx = self.spiral_bullets.index(sp_tuple)
+            self.spiral_bullets[idx] = (bullet, angle, radius, ang_speed, rad_speed, cx, cy)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move radial burst bullets ----------------
+        for rb_tuple in self.radial_bullets[:]:
+            bullet, vx, vy = rb_tuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                self.score += 1
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move wave bullets ----------------
+        for wtuple in self.wave_bullets[:]:
+            bullet, base_x, phase, amp, vy, phase_speed = wtuple
+            phase += phase_speed
+            # Get current bullet coords to compute center y
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            height = by2 - by1
+            # Vertical move
+            self.canvas.move(bullet, 0, vy)
+            # Recompute center after vertical move
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            cy = (by1 + by2)/2
+            cx = base_x + _sin(phase) * amp
+            size = bx2 - bx1
+            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+size/2)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                continue
+            if cy > self.height + 30:
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                self.score += 2
+                continue
+            idx = self.wave_bullets.index(wtuple)
+            self.wave_bullets[idx] = (bullet, base_x, phase, amp, vy, phase_speed)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move boomerang bullets ----------------
+        for btuple in self.boomerang_bullets[:]:
+            bullet, vy, timer, state = btuple
+            if state == 'down':
+                self.canvas.move(bullet, 0, vy)
+                timer -= 1
+                if timer <= 0:
+                    state = 'up'
+            else:  # up
+                self.canvas.move(bullet, 0, -vy*0.8)
+            coords = self.canvas.coords(bullet)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                continue
+            if not coords or coords[3] < -30 or coords[1] > self.height + 40:
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                self.score += 3
+                continue
+            idx = self.boomerang_bullets.index(btuple)
+            self.boomerang_bullets[idx] = (bullet, vy, timer, state)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move split bullets ----------------
+        for stuple in self.split_bullets[:]:
+            bullet, timer = stuple
+            self.canvas.move(bullet, 0, 5 + self.difficulty/4)
+            timer -= 1
+            coords = self.canvas.coords(bullet)
+            if timer <= 0 and coords:
+                # Split into fragments (6) moving outward in a circle
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                frag_count = 6
+                frag_speed = 4 + self.difficulty/5
+                for i in range(frag_count):
+                    ang = (2*math.pi/frag_count)*i
+                    vx = _cos(ang) * frag_speed
+                    vy2 = _sin(ang) * frag_speed
+                    frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
+                    self.radial_bullets.append((frag, vx, vy2))
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 3
+                continue
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                continue
+            if coords and coords[1] > self.height:
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 2
+                continue
+            idx = self.split_bullets.index(stuple)
+            self.split_bullets[idx] = (bullet, timer)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Mid-screen lore fragment display (spawn + blink + expire)
+        try:
+            if hasattr(self, 'maybe_show_mid_lore'):
+                self.maybe_show_mid_lore()
+            if getattr(self, '_mid_lore_items', None) is not None:
+                for item in self._mid_lore_items[:]:
+                    ids = item.get('ids', [])
+                    life = item.get('life', 0)
+                    life -= 1
+                    item['life'] = life
+                    # Blink during final 15 frames
+                    if life < 15:
+                        blink_hidden = (life % 4) in (0,1)
+                        state = 'hidden' if blink_hidden else 'normal'
+                        for oid in ids:
+                            try: self.canvas.itemconfig(oid, state=state)
+                            except Exception: pass
+                    if life <= 0:
+                        for oid in ids:
+                            try: self.canvas.delete(oid)
+                            except Exception: pass
+                        self._mid_lore_items.remove(item)
+        except Exception:
+            pass
+
+        # Update damage flash visuals (overlay & flicker)
+        try:
+            self._update_damage_flash()
+        except Exception:
+            pass
+        self.root.after(50, self.update_game)
+        # Update Debug HUD late so counts reflect this frame's state
+        if self.debug_hud_enabled:
+            self._update_debug_hud()
+
+    # ---------------- Focus / Pulse mechanic helpers ----------------
+    def _focus_key_pressed(self, event=None):
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
+            return
+        if self.focus_overheat_locked:
+            return
+        self.focus_active = True
+
+    def _focus_key_released(self, event=None):
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
+            self._trigger_focus_pulse()
+        self.focus_active = False
+
+    def _trigger_focus_pulse(self):
+        # Visual ring
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1+px2)/2; cy = (py1+py2)/2
+            ring = self.canvas.create_oval(cx-10, cy-10, cx+10, cy+10, outline="#66ffff", width=3)
+            self.focus_pulse_visuals.append((ring, 0))  # (id, life)
+        except Exception:
+            pass
+        # Affect bullets within radius: simple delete for now
+        removed = 0
+        radius2 = self.focus_pulse_radius ** 2
+        for coll in [self.bullets, self.bullets2, self.triangle_bullets, self.diag_bullets, self.boss_bullets, self.zigzag_bullets, self.fast_bullets,
+                     self.star_bullets, self.rect_bullets, self.egg_bullets, self.quad_bullets, self.exploding_bullets, self.bouncing_bullets]:
+            for entry in coll[:]:
+                bid = entry[0] if isinstance(entry, tuple) else entry
+                try:
+                    c = self.canvas.coords(bid)
+                    if not c:
+                        continue
+                    if len(c) == 4:
+                        bx = (c[0]+c[2])/2; by = (c[1]+c[3])/2
+                    else:
+                        xs=c[0::2]; ys=c[1::2]
+                        bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
+                    dx = bx - cx; dy = by - cy
+                    if dx*dx + dy*dy <= radius2:
+                        self.canvas.delete(bid)
+                        coll.remove(entry)
+                        removed += 1
+                except Exception:
+                    pass
+        # Score reward
+        self.score += removed
+        # Reset focus charge & overheat decay
+        self.focus_charge = 0.0
+        self.focus_charge_ready = False
+        self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_decay_on_pulse)
+        self.focus_pulse_cooldown = self.focus_pulse_cooldown_time
+
+    def _update_focus_visuals(self):
+        new=[]
+        for rid, life in self.focus_pulse_visuals:
+            life += 1
+            try:
+                # expand & fade
+                x1,y1,x2,y2 = self.canvas.coords(rid)
+                cx=(x1+x2)/2; cy=(y1+y2)/2
+                growth=18
+                self.canvas.coords(rid, cx-growth-life*4, cy-growth-life*4, cx+growth+life*4, cy+growth+life*4)
+                if life % 2 == 0:
+                    self.canvas.itemconfig(rid, outline="#99ffff")
+            except Exception:
+                continue
+            if life < 12:
+                new.append((rid, life))
+            else:
+                try: self.canvas.delete(rid)
+                except Exception: pass
+        self.focus_pulse_visuals = new
+
+    def _update_focus_charge(self):
+        if getattr(self, 'game_over', False) or getattr(self, 'paused', False):
+            return
+        now = time.time()
+        # Unlock if lock expired
+        if self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+            self.focus_overheat_locked = False
+        # Charging phase
+        if self.focus_active and not self.focus_charge_ready and not self.focus_overheat_locked:
+            if self.focus_pulse_cooldown <= 0:
+                self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_rate)
+                if self.focus_charge >= self.focus_charge_threshold:
+                    self.focus_charge_ready = True
+        # Overheat accumulation
+        if self.focus_active and self.focus_charge_ready and not self.focus_overheat_locked:
+            self.focus_overheat = min(1.0, self.focus_overheat + self.focus_overheat_rate)
+            if self.focus_overheat >= 1.0:
+                self.focus_overheat_locked = True
+                self.focus_overheat_lock_until = now + 3.0
+                self.focus_active = False
+        # Passive cooldown
+        if not self.focus_active or self.focus_overheat_locked:
+            if self.focus_overheat > 0:
+                self.focus_overheat = max(0.0, self.focus_overheat - self.focus_overheat_cool_rate)
+                if self.focus_overheat <= 0 and self.focus_overheat_locked and now >= self.focus_overheat_lock_until:
+                    self.focus_overheat_locked = False
+
+    # Override / extend existing update_game by injecting focus + HUD + i-frames hooks
+    def update_game(self):
+        if self.game_over:
+            return
+        if self.paused:
+            return
+        # Frame timing capture for Debug HUD
+        try:
+            now_perf = time.perf_counter()
+            if hasattr(self, '_last_frame_time_stamp'):
+                dt_ms = (now_perf - self._last_frame_time_stamp) * 1000.0
+                self._frame_time_buffer.append(dt_ms)
+            self._last_frame_time_stamp = now_perf
+        except Exception:
+            pass
+        # Update focus pulse cooldown timer (wall time based)
+        if self.focus_pulse_cooldown > 0:
+            self.focus_pulse_cooldown -= 0.05  # approx frame duration
+            if self.focus_pulse_cooldown < 0:
+                self.focus_pulse_cooldown = 0
+        # Update focus charge accumulation & visuals
+        self._update_focus_charge()
+        self._update_focus_visuals()
+    # (Removed controller polling)
+    # Background animation
+        self.update_background()
+    # Animate player decorative sprite
+        self.animate_player_sprite()
+        self.canvas.lift(self.dialog)
+        self.canvas.lift(self.scorecount)
+        self.canvas.lift(self.timecount)
+        if hasattr(self, 'next_unlock_text'):
+            self.canvas.lift(self.next_unlock_text)
+        # Move graze effect to follow player if active
+        if self.graze_effect_id:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            self.canvas.coords(
+                self.graze_effect_id,
+                cx - self.grazing_radius, cy - self.grazing_radius,
+                cx + self.grazing_radius, cy + self.grazing_radius
+            )
+            self.graze_effect_timer -= 1
+            if self.graze_effect_timer <= 0:
+                self.canvas.delete(self.graze_effect_id)
+                self.graze_effect_id = None
+        # Increase difficulty every 60 seconds
+        now = time.time()
+    # Difficulty scaling removed
+        if now - self.lastdial > 10:
+            self.get_dialog_string()
+            self.lastdial = now
+            self.canvas.itemconfig(self.dialog, text=self.dial)
+        # Lore rotation
+        if getattr(self, 'lore_text', None) is not None and now - getattr(self, 'lore_last_change', 0) >= getattr(self, 'lore_interval', 8):
+            self.update_lore_line()
+        # Calculate time survived, pausable
+        time_survived = int(now - self.timee - self.paused_time_total)
+        self.canvas.itemconfig(self.scorecount, text=f"Score: {self.score}")
+        self.canvas.itemconfig(self.timecount, text=f"Time: {time_survived}")
+        # Update health HUD each frame
+        if getattr(self, 'health_text', None) is not None:
+            try:
+                self.canvas.itemconfig(self.health_text, text=f"HP: {max(0, self.lives)}")
+                self.canvas.lift(self.health_text)
+            except Exception:
+                pass
+        # Synchronize unified bullet registry with legacy lists (Step 3 enhancement)
+        if hasattr(self, '_bullet_registry'):
+            try:
+                self._sync_registry_from_lists()
+                self._prune_registry()
+            except Exception:
+                pass
+        # Handle freeze expiration
+        if self.freeze_active and now >= self.freeze_end_time:
+            self.freeze_active = False
+            if self.freeze_text:
+                try:
+                    self.canvas.delete(self.freeze_text)
+                except Exception:
+                    pass
+                self.freeze_text = None
+            # Remove overlay & particles
+            if self.freeze_overlay:
+                try: self.canvas.delete(self.freeze_overlay)
+                except Exception: pass
+                self.freeze_overlay = None
+            for pid, *_ in self.freeze_particles:
+                try: self.canvas.delete(pid)
+                except Exception: pass
+            self.freeze_particles.clear()
+            # Restore bullet colors
+            self._tint_all_bullets(freeze=False)
+            # Spawn shatter burst effect from each bullet to show reactivation
+            self._spawn_unfreeze_shatter()
+        # Handle rewind expiration
+        if self.rewind_active and now >= self.rewind_end_time:
+            self.rewind_active = False
+            self._rewind_pointer = None
+            if self.rewind_text:
+                try: self.canvas.delete(self.rewind_text)
+                except Exception: pass
+                self.rewind_text = None
+            if self._rewind_overlay:
+                try: self.canvas.delete(self._rewind_overlay)
+                except Exception: pass
+                self._rewind_overlay = None
+            # Clear vignette
+            self._clear_rewind_vignette()
+            # Award score bonus based on bullet count at start
+            try:
+                bonus = int(self._rewind_start_bullet_count * self._rewind_bonus_factor)
+                if bonus > 0:
+                    self.score += bonus
+                    # transient floating text
+                    try:
+                        txt = self.canvas.create_text(self.width//2, self.height//2 + 60, text=f"+{bonus} REWIND BONUS", fill="#66ff99", font=("Arial", 28, "bold"))
+                        self.canvas.after(1200, lambda tid=txt: (self.canvas.delete(tid) if self.canvas.type(tid) else None))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # Play end sound
+            try:
+                if self._rewind_end_sound is None:
+                    base_dir = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+                    p = os.path.join(base_dir, 'rewind_end.wav')
+                    if os.path.exists(p):
+                        self._rewind_end_sound = pygame.mixer.Sound(p)
+                if self._rewind_end_sound:
+                    self._rewind_end_sound.play()
+            except Exception:
+                pass
+        # If freeze just ended and a rewind was pending, activate it now
+        if (not self.freeze_active) and self.rewind_pending and not self.rewind_active:
+            self.rewind_pending = False
+            self.activate_rewind(self._pending_rewind_duration)
+        # Update rewind countdown label
+        if self.rewind_active and self.rewind_text:
+            remaining = max(0.0, self.rewind_end_time - now)
+            try:
+                self.canvas.itemconfig(self.rewind_text, text=f"REWIND {remaining:0.1f}s")
+                self.canvas.lift(self.rewind_text)
+            except Exception:
+                pass
+        # Show queued rewind label if pending
+        if self.rewind_pending and not self.rewind_active:
+            if not self.rewind_pending_text:
+                try:
+                    self.rewind_pending_text = self.canvas.create_text(self.width//2, self.height//2 - 140, text="REWIND QUEUED", fill="#66ff99", font=("Arial", 24, "bold"))
+                except Exception:
+                    self.rewind_pending_text = None
+            else:
+                try: self.canvas.lift(self.rewind_pending_text)
+                except Exception: pass
+        else:
+            if self.rewind_pending_text and not self.rewind_active:
+                # If no longer pending (activated), it is cleared inside activate_rewind
+                pass
+        # Update freeze countdown text if active
+        if self.freeze_active and self.freeze_text:
+            remaining = max(0.0, self.freeze_end_time - now)
+            try:
+                self.canvas.itemconfig(self.freeze_text, text=f"FREEZE {remaining:0.1f}s")
+                self.canvas.lift(self.freeze_text)
+            except Exception:
+                pass
+        # Spawn/update freeze particles (slow drifting flakes) while frozen
+        if self.freeze_active:
+            # spawn a few each frame
+            for _ in range(3):
+                import random as _r
+                x = _r.randint(0, self.width)
+                y = _r.randint(0, self.height)
+                size = _r.randint(3,6)
+                try:
+                    pid = self.canvas.create_oval(x-size/2, y-size/2, x+size/2, y+size/2, fill="#c9f6ff", outline="")
+                except Exception:
+                    continue
+                vx = _r.uniform(-0.5,0.5)
+                vy = _r.uniform(0.2,0.8)
+                life = _r.randint(18,35)
+                self.freeze_particles.append((pid, vx, vy, life))
+            new_fp = []
+            for pid, vx, vy, life in self.freeze_particles:
+                life -= 1
+                try:
+                    self.canvas.move(pid, vx, vy)
+                    if life < 10:
+                        # fade via stipple swap if possible
+                        if life % 2 == 0:
+                            self.canvas.itemconfig(pid, fill="#99ddee")
+                    if life > 0:
+                        new_fp.append((pid, vx, vy, life))
+                    else:
+                        self.canvas.delete(pid)
+                except Exception:
+                    pass
+            self.freeze_particles = new_fp
+        # Compute next unlock pattern
+        remaining_candidates = [(pat, t_req - time_survived) for pat, t_req in self.unlock_times.items() if t_req > time_survived]
+        if remaining_candidates:
+            # Pick soonest
+            pat, secs = min(remaining_candidates, key=lambda x: x[1])
+            display = self.pattern_display_names.get(pat, pat.title())
+            self.canvas.itemconfig(self.next_unlock_text, text=f"Next Pattern: {display} in {secs}s")
+        else:
+            self.canvas.itemconfig(self.next_unlock_text, text="All patterns unlocked")
+
+        # Centralized pattern spawning handled via registry after unlock scheduling
+        self._attempt_pattern_spawns(time_survived)
+
+        # --- Freeze power-up spawn (independent of bullet patterns) ---
+        # Only spawn if not currently active and limited number on screen
+        if not self.freeze_active and len(self.freeze_powerups) < 1:
+            # Roughly ~ one every ~45s expected (1 in 900 per 50ms frame)
+            if random.randint(1, 900) == 1:
+                self.spawn_freeze_powerup()
+        # --- Rewind power-up spawn ---
+        if not self.rewind_active and len(self.rewind_powerups) < 1:
+            # Rarer than freeze (approx one every ~70s)
+            if random.randint(1, 1400) == 1 and len(self._bullet_history) > 40:
+                self.spawn_rewind_powerup()
+
+        # Move existing freeze power-ups downward & check collection
+        for p_id in self.freeze_powerups[:]:
+            try:
+                self.canvas.move(p_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                bx1, by1, bx2, by2 = self.canvas.coords(p_id)
+                if bx2 < px1 or bx1 > px2 or by2 < py1 or by1 > py2:
+                    # no overlap
+                    pass
+                else:
+                    self.activate_freeze()
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+                    continue
+                # Remove if off screen
+                if by1 > self.height:
+                    try:
+                        self.canvas.delete(p_id)
+                    except Exception:
+                        pass
+                    self.freeze_powerups.remove(p_id)
+            except Exception:
+                try:
+                    self.freeze_powerups.remove(p_id)
+                except Exception:
+                    pass
+        # Move existing rewind power-ups & check collection
+        for r_id in self.rewind_powerups[:]:
+            try:
+                self.canvas.move(r_id, 0, 4)
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
+                rx1, ry1, rx2, ry2 = self.canvas.coords(r_id)
+                # collection overlap
+                if not (rx2 < px1 or rx1 > px2 or ry2 < py1 or ry1 > py2):
+                    self.activate_rewind()
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+                    continue
+                if ry1 > self.height:
+                    try: self.canvas.delete(r_id)
+                    except Exception: pass
+                    self.rewind_powerups.remove(r_id)
+            except Exception:
+                try: self.rewind_powerups.remove(r_id)
+                except Exception: pass
+
+        # (Per-pattern spawn logic migrated to registry earlier in update cycle)
+        # Capture bullet snapshot (post spawn) if not frozen or rewinding
+        if not self.freeze_active and not self.rewind_active:
+            try:
+                self._capture_bullet_snapshot()
+            except Exception:
+                pass
+
+        # If freeze is active, skip movement updates for bullets (they remain frozen in place)
+        if self.freeze_active:
+            self.root.after(50, self.update_game)
+            return
+        if self.rewind_active:
+            # Rewind bullet positions instead of advancing
+            self._perform_rewind_step()
+            # Damage flash fade while rewinding
+            try: self._update_damage_flash()
+            except Exception: pass
+            self.root.after(50, self.update_game)
+            return
+        # Move triangle bullets
+        triangle_speed = 7
+
+        for bullet_tuple in self.triangle_bullets[:]:
+            bullet, direction = bullet_tuple
+            self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.paused = False
+                self.pause_text = None
+                self.triangle_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.triangle_bullets.remove(bullet_tuple)
+                    self.score += 2
+        # Move bouncing bullets
+        for bullet_tuple in self.bouncing_bullets[:]:
+            bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
+            self.canvas.move(bullet, x_velocity, y_velocity)
+            coords = self.canvas.coords(bullet)
+            bounced = False
+            # Bounce off left/right
+            if coords[0] <= 0 or coords[2] >= self.width:
+                x_velocity = -x_velocity
+                bounced = True
+            # Bounce off top/bottom
+            if coords[1] <= 0 or coords[3] >= self.height:
+                y_velocity = -y_velocity
+                bounced = True
+            if bounced:
+                bounces_left -= 1
+            # Remove bullet if out of bounces
+            if bounces_left < 0:
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove(bullet_tuple)
+                self.score += 2
+                continue
+            # Update tuple with new velocities and bounces
+            idx = self.bouncing_bullets.index(bullet_tuple)
+            self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
+                if self.lives <= 0:
+                    self.end_game()
+        # Move exploding bullets
+        for bullet in self.exploding_bullets[:]:
+            self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
+            coords = self.canvas.coords(bullet)
+            # Check if bullet reached middle of screen (y ~ self.height//2)
+            if coords and abs((coords[1] + coords[3]) / 2 - self.height // 2) < 20:
+                # Explode into 4 diagonal fragments
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                size = 12
+                directions = [(6, 6), (-6, 6), (6, -6), (-6, -6)]
+                for dx, dy in directions:
+                    frag = self.canvas.create_oval(bx-size//2, by-size//2, bx+size//2, by+size//2, fill="white")
+                    self.exploded_fragments.append((frag, dx, dy))
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                self.score += 2
+                continue
+            if self.check_collision(bullet):
+                self.lives -= 1
+                self.canvas.delete(bullet)
+                self.exploding_bullets.remove(bullet)
+                if self.lives <= 0:
+                    self.end_game()
+            else:
+                if coords and coords[1] > self.height:
+                    self.canvas.delete(bullet)
+                    self.exploding_bullets.remove(bullet)
+                    self.score += 2
+        # Move exploded fragments (diagonal bullets)
+        for frag_tuple in self.exploded_fragments[:]:
+            frag, dx, dy = frag_tuple
+            self.canvas.move(frag, dx, dy)
+            coords = self.canvas.coords(frag)
+            if self.check_collision(frag):
+                self.lives -= 1
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+            elif coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width or coords[3] < 0):
+                self.canvas.delete(frag)
+                self.exploded_fragments.remove(frag_tuple)
+                self.score += 1
+            # Grazing check
+            if self.check_graze(frag) and frag not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(frag)
+                self.show_graze_effect()
+        # Handle laser indicators
+        for indicator_tuple in self.laser_indicators[:]:
+            indicator_id, y, timer = indicator_tuple
+            timer -= 1
+            if timer <= 0:
+                self.canvas.delete(indicator_id)
+                # Spawn actual laser
+                laser_id = self.canvas.create_line(0, y, self.width, y, fill="red", width=8)
+                self.lasers.append((laser_id, y, 20))  # Laser lasts 20 frames
+                self.laser_indicators.remove(indicator_tuple)
+            else:
+                idx = self.laser_indicators.index(indicator_tuple)
+                self.laser_indicators[idx] = (indicator_id, y, timer)
+
+        # Handle lasers
+        for laser_tuple in self.lasers[:]:
+            laser_id, y, timer = laser_tuple
+            timer -= 1
+            # Check collision with player
+            player_coords = self.canvas.coords(self.player)
+            if player_coords[1] <= y <= player_coords[3]:
+                self.lives -= 1
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+                if self.lives <= 0:
+                    self.end_game()
+                continue
+            if timer <= 0:
+                self.canvas.delete(laser_id)
+                self.lasers.remove(laser_tuple)
+            else:
+                idx = self.lasers.index(laser_tuple)
+                self.lasers[idx] = (laser_id, y, timer)
+
+        # Bullet speeds scale with difficulty
+        bullet_speed = 7
+        bullet2_speed = 7
+        diag_speed = 5
+        boss_speed = 10
+        zigzag_speed = 5
+        fast_speed = 14
+        star_speed = 8
+        rect_speed = 8
+        quad_speed = 7
+        egg_speed = 6
+        homing_speed = 6
+
+        # Dispatch-driven updates for some bullet kinds (Step 4)
+        self._dispatch_update_kind('vertical', speed=bullet_speed)
+        self._dispatch_update_kind('horizontal', speed=bullet2_speed, horizontal=True)
+
+        # Move egg bullets
+        for egg_bullet in self.egg_bullets[:]:
+            self.canvas.move(egg_bullet, 0, egg_speed)
+            if self.check_collision(egg_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+            elif self.canvas.coords(egg_bullet)[1] > self.height:
+                self.canvas.delete(egg_bullet)
+                self.egg_bullets.remove(egg_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(egg_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move diagonal bullets
+        for bullet_tuple in self.diag_bullets[:]:
+            dbullet, direction = bullet_tuple
+            self.canvas.move(dbullet, diag_speed * direction, diag_speed)
+            if self.check_collision(dbullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+            elif self.canvas.coords(dbullet)[1] > self.height:
+                self.canvas.delete(dbullet)
+                self.diag_bullets.remove(bullet_tuple)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(dbullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move boss bullets
+        for boss_bullet in self.boss_bullets[:]:
+            self.canvas.move(boss_bullet, 0, boss_speed)
+            if self.check_collision(boss_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+            elif self.canvas.coords(boss_bullet)[1] > self.height:
+                self.canvas.delete(boss_bullet)
+                self.boss_bullets.remove(boss_bullet)
+                self.score += 5  # Boss bullets give more score
+            # Grazing check
+            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
+                self.score += 2
+                self.grazed_bullets.add(boss_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move quad bullets
+        for bullet in self.quad_bullets[:]:
+            self.canvas.move(bullet, 0, quad_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+            elif self.canvas.coords(bullet)[1] > self.height:
+                self.canvas.delete(bullet)
+                self.quad_bullets.remove(bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move zigzag bullets
+        for bullet_tuple in self.zigzag_bullets[:]:
+            bullet, direction, step_count = bullet_tuple
+            # Change direction every 10 steps
+            if step_count % 10 == 0:
+                direction *= -1
+            self.canvas.move(bullet, 5 * direction, zigzag_speed)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.zigzag_bullets.remove(bullet_tuple)
+            else:
+                coords = self.canvas.coords(bullet)
+                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                    self.canvas.delete(bullet)
+                    self.zigzag_bullets.remove(bullet_tuple)
+                    self.score += 2
+                else:
+                    # Update tuple with incremented step_count and possibly new direction
+                    idx = self.zigzag_bullets.index(bullet_tuple)
+                    self.zigzag_bullets[idx] = (bullet, direction, step_count + 1)
+            # Grazing check
+            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move fast bullets
+        for fast_bullet in self.fast_bullets[:]:
+            self.canvas.move(fast_bullet, 0, fast_speed)
+            if self.check_collision(fast_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+            elif self.canvas.coords(fast_bullet)[1] > self.height:
+                self.canvas.delete(fast_bullet)
+                self.fast_bullets.remove(fast_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(fast_bullet) and fast_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(fast_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move & spin star bullets
+        for star_bullet in self.star_bullets[:]:
+            # Fall movement
+            self.canvas.move(star_bullet, 0, star_speed)
+            # Spin: fetch current coords, rotate around center by small angle
+            coords = self.canvas.coords(star_bullet)
+            if len(coords) >= 6:  # polygon
+                # Compute center
+                xs = coords[0::2]
+                ys = coords[1::2]
+                cx = sum(xs)/len(xs)
+                cy = sum(ys)/len(ys)
+                angle = 0.18  # radians per frame
+                sin_a = _sin(angle)
+                cos_a = _cos(angle)
+                new_pts = []
+                for x, y in zip(xs, ys):
+                    dx = x - cx
+                    dy = y - cy
+                    rx = dx * cos_a - dy * sin_a + cx
+                    ry = dx * sin_a + dy * cos_a + cy
+                    new_pts.extend([rx, ry])
+                self.canvas.coords(star_bullet, *new_pts)
+            # Collision / bounds / graze
+            if self.check_collision(star_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                continue
+            # Off screen
+            bbox = self.canvas.bbox(star_bullet)
+            if bbox and bbox[1] > self.height:
+                self.canvas.delete(star_bullet)
+                self.star_bullets.remove(star_bullet)
+                self.score += 3
+                continue
+            # Grazing
+            if self.check_graze(star_bullet) and star_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(star_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Move rectangle bullets
+        for rect_bullet in self.rect_bullets[:]:
+            self.canvas.move(rect_bullet, 0, rect_speed)
+            if self.check_collision(rect_bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+            elif self.canvas.coords(rect_bullet)[1] > self.height:
+                self.canvas.delete(rect_bullet)
+                self.rect_bullets.remove(rect_bullet)
+                self.score += 2
+            # Grazing check
+            if self.check_graze(rect_bullet) and rect_bullet not in self.grazed_bullets:
+                self.score += 1
+                self.grazed_bullets.add(rect_bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move homing bullets ----------------
+        for hb_tuple in self.homing_bullets[:]:
+            # Backward compatibility: allow old 3-tuple
+            if len(hb_tuple) == 3:
+                bullet, vx, vy = hb_tuple
+                life = self.homing_bullet_max_life
+            else:
+                bullet, vx, vy, life = hb_tuple
+            # Compute vector toward player center
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2)/2
+            pcy = (py1 + py2)/2
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            bcx = (bx1 + bx2)/2
+            bcy = (by1 + by2)/2
+            dx = pcx - bcx
+            dy = pcy - bcy
+           
+            dist = _hypot(dx, dy) or 1
+            # Normalize and apply steering (lerp velocities)
+            target_vx = dx / dist * homing_speed
+            target_vy = dy / dist * homing_speed
+            steer_factor = 0.15  # how quickly it turns
+            vx = vx * (1 - steer_factor) + target_vx * steer_factor
+            vy = vy * (1 - steer_factor) + target_vy * steer_factor
+            self.canvas.move(bullet, vx, vy)
+            life -= 1
+            # Update tuple (store life)
+            idx = self.homing_bullets.index(hb_tuple)
+            self.homing_bullets[idx] = (bullet, vx, vy, life)
+            # Collision / out of bounds
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.homing_bullets.remove(self.homing_bullets[idx])
+            else:
+                coords = self.canvas.coords(bullet)
+                if (coords and (coords[1] > self.height or coords[0] < -60 or coords[2] > self.width + 60 or life <= 0)):
+                    try:
+                        self.canvas.delete(bullet)
+                    except Exception:
+                        pass
+                    # Remove using safe search if idx stale
+                    try:
+                        self.homing_bullets.remove(self.homing_bullets[idx])
+                    except Exception:
+                        # fallback linear remove by id match
+                        for _t in self.homing_bullets:
+                            if _t[0] == bullet:
+                                self.homing_bullets.remove(_t)
+                                break
+                    self.score += 3
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move spiral bullets ----------------
+        for sp_tuple in self.spiral_bullets[:]:
+            bullet, angle, radius, ang_speed, rad_speed, cx, cy = sp_tuple
+            angle += ang_speed
+            radius += rad_speed
+            x = cx + _cos(angle) * radius
+            y = cy + _sin(angle) * radius
+            size = 20
+            self.canvas.coords(bullet, x-size/2, y-size/2, x+size/2, y+size/2)
+            # Collision & removal
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                continue
+            if (x < -40 or x > self.width + 40 or y < -40 or y > self.height + 40 or radius > max(self.width, self.height)):
+                self.canvas.delete(bullet)
+                self.spiral_bullets.remove(sp_tuple)
+                self.score += 2
+                continue
+            # Update tuple
+            idx = self.spiral_bullets.index(sp_tuple)
+            self.spiral_bullets[idx] = (bullet, angle, radius, ang_speed, rad_speed, cx, cy)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move radial burst bullets ----------------
+        for rb_tuple in self.radial_bullets[:]:
+            bullet, vx, vy = rb_tuple
+            self.canvas.move(bullet, vx, vy)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                continue
+            coords = self.canvas.coords(bullet)
+            if (not coords or coords[2] < -20 or coords[0] > self.width + 20 or coords[3] < -20 or coords[1] > self.height + 20):
+                self.canvas.delete(bullet)
+                self.radial_bullets.remove(rb_tuple)
+                self.score += 1
+                continue
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move wave bullets ----------------
+        for wtuple in self.wave_bullets[:]:
+            bullet, base_x, phase, amp, vy, phase_speed = wtuple
+            phase += phase_speed
+            # Get current bullet coords to compute center y
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            height = by2 - by1
+            # Vertical move
+            self.canvas.move(bullet, 0, vy)
+            # Recompute center after vertical move
+            bx1, by1, bx2, by2 = self.canvas.coords(bullet)
+            cy = (by1 + by2)/2
+            cx = base_x + _sin(phase) * amp
+            size = bx2 - bx1
+            self.canvas.coords(bullet, cx-size/2, cy-height/2, cx+size/2, cy+size/2)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                continue
+            if cy > self.height + 30:
+                self.canvas.delete(bullet)
+                self.wave_bullets.remove(wtuple)
+                self.score += 2
+                continue
+            idx = self.wave_bullets.index(wtuple)
+            self.wave_bullets[idx] = (bullet, base_x, phase, amp, vy, phase_speed)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move boomerang bullets ----------------
+        for btuple in self.boomerang_bullets[:]:
+            bullet, vy, timer, state = btuple
+            if state == 'down':
+                self.canvas.move(bullet, 0, vy)
+                timer -= 1
+                if timer <= 0:
+                    state = 'up'
+            else:  # up
+                self.canvas.move(bullet, 0, -vy*0.8)
+            coords = self.canvas.coords(bullet)
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                continue
+            if not coords or coords[3] < -30 or coords[1] > self.height + 40:
+                self.canvas.delete(bullet)
+                self.boomerang_bullets.remove(btuple)
+                self.score += 3
+                continue
+            idx = self.boomerang_bullets.index(btuple)
+            self.boomerang_bullets[idx] = (bullet, vy, timer, state)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # ---------------- Move split bullets ----------------
+        for stuple in self.split_bullets[:]:
+            bullet, timer = stuple
+            self.canvas.move(bullet, 0, 5 + self.difficulty/4)
+            timer -= 1
+            coords = self.canvas.coords(bullet)
+            if timer <= 0 and coords:
+                # Split into fragments (6) moving outward in a circle
+                bx = (coords[0] + coords[2]) / 2
+                by = (coords[1] + coords[3]) / 2
+                frag_count = 6
+                frag_speed = 4 + self.difficulty/5
+                for i in range(frag_count):
+                    ang = (2*math.pi/frag_count)*i
+                    vx = _cos(ang) * frag_speed
+                    vy2 = _sin(ang) * frag_speed
+                    frag = self.canvas.create_oval(bx-10, by-10, bx+10, by+10, fill="#ff55ff")
+                    self.radial_bullets.append((frag, vx, vy2))
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 3
+                continue
+            if self.check_collision(bullet):
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                continue
+            if coords and coords[1] > self.height:
+                self.canvas.delete(bullet)
+                self.split_bullets.remove(stuple)
+                self.score += 2
+                continue
+            idx = self.split_bullets.index(stuple)
+            self.split_bullets[idx] = (bullet, timer)
+            if bullet not in self.grazed_bullets and self.check_graze(bullet):
+                self.score += 1
+                self.grazed_bullets.add(bullet)
+                self.show_graze_effect()
+                if self.focus_active:
+                    self.focus_charge = min(1.0, self.focus_charge + self.focus_charge_graze_bonus)
+                    if self.focus_charge >= self.focus_charge_threshold:
+                        self.focus_charge_ready = True
+
+        # Mid-screen lore fragment display (spawn + blink + expire)
+        try:
+            if hasattr(self, 'maybe_show_mid_lore'):
+                self.maybe_show_mid_lore()
+            if getattr(self, '_mid_lore_items', None) is not None:
+                for item in self._mid_lore_items[:]:
+                    ids = item.get('ids', [])
+                    life = item.get('life', 0)
+                    life -= 1
+                    item['life'] = life
+                    # Blink during final 15 frames
+                    if life < 15:
+                        blink_hidden = (life % 4) in (0,1)
+                        state = 'hidden' if blink_hidden else 'normal'
+                        for oid in ids:
+                            try: self.canvas.itemconfig(oid, state=state)
+                            except Exception: pass
+                    if life <= 0:
+                        for oid in ids:
+                            try: self.canvas.delete(oid)
+                            except Exception: pass
+                        self._mid_lore_items.remove(item)
+        except Exception:
+            pass
+
+        # Update damage flash visuals (overlay & flicker)
+        try:
+            self._update_damage_flash()
+        except Exception:
+            pass
+        self.root.after(50, self.update_game)
+        # Update Debug HUD late so counts reflect this frame's state
+        if self.debug_hud_enabled:
+            self._update_debug_hud()
