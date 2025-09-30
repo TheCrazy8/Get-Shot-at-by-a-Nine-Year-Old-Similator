@@ -78,6 +78,17 @@ class bullet_hell_game:
         self.wave_bullets = []        # [(bullet_id, base_x, phase, amp, vy, phase_speed)]
         self.boomerang_bullets = []   # [(bullet_id, vy, timer, state)] state: 'down'->'up'
         self.split_bullets = []       # [(bullet_id, timer)] splits into fragments after timer
+        self.static_bullets = []      # list of static bullet ids
+        # --- Static trap (new) ---
+        self.static_trap_active = False
+        self.static_trap_progress = 0.0   # 0..1 progress to escape
+        self.static_trap_end_time = 0.0
+        self.static_trap_time_limit = 4.0
+        self.static_trap_noise_items = []
+        self.static_trap_overlay = None
+        self.static_trap_text = None
+        self.static_trap_invuln_end = 0.0  # brief invuln after escape
+        self._static_trap_last_key = None
     # --- Freeze power-up state ---
         self.freeze_powerups = []      # list of canvas item ids for freeze power-ups
         self.freeze_active = False     # currently freezing bullets
@@ -117,6 +128,7 @@ class bullet_hell_game:
             'wave': '#a8ffe0',
             'boomerang': '#ffd0ff',
             'split': '#e0ffa8',
+            'static': '#cccccc'
         }
         # --- Rewind power-up state ---
         # Rewinds all bullets' positions and states backwards in time for a short duration.
@@ -175,11 +187,15 @@ class bullet_hell_game:
             'radial': 'Radial Burst',
             'wave': 'Wave',
             'boomerang': 'Boomerang',
-            'split': 'Splitter'
+            'split': 'Splitter',
+            'static': 'Static Trap'
         }
         # Moved next pattern display to bottom center
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
-        self.lives = 1
+        self.lives = 3
+        # Health display icon item ids (hearts). Populated by update_health_display()
+        self.health_icon_items = []
+        
         self.game_over = False
         self.paused = False
         self.pause_text = None
@@ -214,6 +230,8 @@ class bullet_hell_game:
         self.graze_effect_id = None
         self.paused_time_total = 0  # Total time spent paused
         self.pause_start_time = None  # When pause started
+        # Initialize health display after HUD created
+        self.update_health_display()
         # Practice mode (invincible)
         self.practice_mode = False
         self.practice_text = None
@@ -243,7 +261,8 @@ class bullet_hell_game:
             'radial': 195,
             'wave': 210,
             'boomerang': 225,
-            'split': 240
+            'split': 240,
+            'static': 255
         }
         # Initialize lore fragments (non-destructive)
         try:
@@ -397,6 +416,36 @@ class bullet_hell_game:
         else:
             r,g,b = 1, 0, q
         self.canvas.itemconfig(self.player, fill=f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}")
+
+    # ---------------- Health / Lives Display ----------------
+    def update_health_display(self):
+        """Render heart icons (❤) in top-left under score to represent remaining lives.
+        Clears previous icons and recreates based on self.lives. Uses text items for simplicity."""
+        # Remove any existing heart items
+        if getattr(self, 'health_icon_items', None):
+            for hid in self.health_icon_items:
+                try:
+                    self.canvas.delete(hid)
+                except Exception:
+                    pass
+            self.health_icon_items = []
+        # Spacing & position: start just below score text
+        base_x = 20
+        base_y = 46  # score at ~20, hearts below
+        spacing = 28
+        for i in range(getattr(self, 'lives', 0)):
+            try:
+                heart = self.canvas.create_text(base_x + i*spacing, base_y, text='❤', fill='#ff4d6d', font=("Arial", 22, 'bold'))
+            except Exception:
+                # fallback rectangle if emoji not supported
+                heart = self.canvas.create_rectangle(base_x + i*spacing, base_y, base_x + i*spacing + 20, base_y+20, outline='#ff4d6d')
+            self.health_icon_items.append(heart)
+        # Ensure hearts appear above background but under pause/game over overlays
+        for hid in self.health_icon_items:
+            try:
+                self.canvas.lift(hid)
+            except Exception:
+                pass
 
 
     # ---------------- Vaporwave background setup ----------------
@@ -578,6 +627,23 @@ class bullet_hell_game:
         self.wave_bullets = []
         self.boomerang_bullets = []
         self.split_bullets = []
+        self.static_bullets = []
+        # clear static trap visuals/state
+        if getattr(self, 'static_trap_overlay', None):
+            try: self.canvas.delete(self.static_trap_overlay)
+            except Exception: pass
+            self.static_trap_overlay = None
+        for rid in getattr(self, 'static_trap_noise_items', []):
+            try: self.canvas.delete(rid)
+            except Exception: pass
+        self.static_trap_noise_items = []
+        if getattr(self, 'static_trap_text', None):
+            try: self.canvas.delete(self.static_trap_text)
+            except Exception: pass
+            self.static_trap_text = None
+        self.static_trap_active = False
+        self.static_trap_progress = 0.0
+        self.static_trap_invuln_end = 0.0
         # Reset freeze power-up state
         self.freeze_powerups = []
         self.freeze_active = False
@@ -634,7 +700,10 @@ class bullet_hell_game:
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
         # Core state
-        self.lives = 1
+        self.lives = 3
+        # Refresh health hearts
+        if hasattr(self, 'update_health_display'):
+            self.update_health_display()
         self.game_over = False
         self.paused = False
         self.pause_text = None
@@ -896,6 +965,18 @@ class bullet_hell_game:
             y_velocity = speed * _sin(angle)
             # Bouncing state: (bullet, x_velocity, y_velocity, bounces_left)
             self.bouncing_bullets.append((bullet, x_velocity, y_velocity, 3))
+
+    def shoot_static_bullet(self):
+        """Spawn a 'static' bullet that triggers a static trap mini-escape on hit instead of immediate damage."""
+        if self.game_over:
+            return
+        x = random.randint(0, self.width-26)
+        # Visual: white core with gray outline to differentiate
+        try:
+            bid = self.canvas.create_oval(x, 0, x+26, 26, fill="#bbbbbb", outline="#ffffff", width=2)
+        except Exception:
+            bid = self.canvas.create_rectangle(x, 0, x+26, 26, fill="#bbbbbb", outline="#ffffff")
+        self.static_bullets.append(bid)
 
     def shoot_ring_burst(self):
         """Spawn a circular ring of bullets that fly outward."""
@@ -1223,6 +1304,7 @@ class bullet_hell_game:
         capture_list('wave_bullets', self.wave_bullets)
         capture_list('boomerang_bullets', self.boomerang_bullets)
         capture_list('split_bullets', self.split_bullets)
+        capture_list('static_bullets', self.static_bullets)
         # lasers & indicators not rewound (temporal hazards), skip
         self._bullet_history.append(frame)
         if len(self._bullet_history) > self._bullet_history_max:
@@ -1356,6 +1438,10 @@ class bullet_hell_game:
     def move_player(self, event):
         if self.paused or self.game_over:
             return
+        # While in static trap, only count specific keys to progress, suppress movement
+        if self.static_trap_active:
+            self._handle_static_trap_key(event)
+            return
         s = self.player_speed * (0.5 if self.focus_active else 1.0)
         if event.keysym in ('Left','a'):
             self.apply_player_move(-s,0)
@@ -1461,6 +1547,9 @@ class bullet_hell_game:
         """
         if self.practice_mode or self.game_over:
             return False
+        # brief invulnerability after static trap escape
+        if self.static_trap_invuln_end and time.time() < self.static_trap_invuln_end:
+            return False
         try:
             b = self.canvas.coords(bullet)
             if not b:
@@ -1490,6 +1579,9 @@ class bullet_hell_game:
         if self.game_over:
             return
         self.lives -= 1
+        # Update hearts HUD
+        if hasattr(self, 'update_health_display'):
+            self.update_health_display()
         if self.lives <= 0:
             # Pick a random game over message once
             try:
@@ -1540,6 +1632,11 @@ class bullet_hell_game:
             return
         if self.paused:
             return
+        # If static trap active, update trap sequence and skip rest of gameplay movement/spawn
+        if self.static_trap_active:
+            self._update_static_trap()
+            self.root.after(50, self.update_game)
+            return
         # Frame timing capture for Debug HUD
         try:
             now_perf = time.perf_counter()
@@ -1567,6 +1664,13 @@ class bullet_hell_game:
         self.canvas.lift(self.timecount)
         if hasattr(self, 'next_unlock_text'):
             self.canvas.lift(self.next_unlock_text)
+        # Ensure hearts appear on top of bullets
+        if getattr(self, 'health_icon_items', None):
+            for hid in self.health_icon_items:
+                try:
+                    self.canvas.lift(hid)
+                except Exception:
+                    pass
         # Move graze effect to follow player if active
         if self.graze_effect_id:
             px1, py1, px2, py2 = self.canvas.coords(self.player)
@@ -2574,6 +2678,151 @@ class bullet_hell_game:
         # Update Debug HUD late so counts reflect this frame's state
         if self.debug_hud_enabled:
             self._update_debug_hud()
+
+    # ---------------- Static Trap (voidy static escape) ----------------
+    def _static_can_trigger_trap(self):
+        return (not self.static_trap_active) and (not self.rewind_active) and (not self.freeze_active)
+
+    def _check_bbox_overlap_player(self, coords):
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            if len(coords) == 4:
+                bx1, by1, bx2, by2 = coords
+            else:
+                xs = coords[::2]; ys = coords[1::2]
+                bx1, bx2 = min(xs), max(xs)
+                by1, by2 = min(ys), max(ys)
+            return px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1
+        except Exception:
+            return False
+
+    def start_static_trap(self):
+        if self.static_trap_active:
+            return
+        self.static_trap_active = True
+        self.static_trap_progress = 0.0
+        self.static_trap_end_time = time.time() + self.static_trap_time_limit
+        # Overlay dark + noise rectangles
+        try:
+            self.static_trap_overlay = self.canvas.create_rectangle(0,0,self.width,self.height, fill="#000000", outline="")
+            self.canvas.itemconfig(self.static_trap_overlay, stipple="gray25")
+        except Exception:
+            self.static_trap_overlay = None
+        # spawn noise blocks
+        import random as _r
+        for _ in range(120):
+            w = _r.randint(8,40); h=_r.randint(4,20)
+            x = _r.randint(0, self.width-w)
+            y = _r.randint(0, self.height-h)
+            col = _r.choice(["#111111","#222222","#444444","#666666","#999999","#bbbbbb"])
+            try:
+                rid = self.canvas.create_rectangle(x,y,x+w,y+h, fill=col, outline="")
+                self.static_trap_noise_items.append(rid)
+                self.canvas.tag_lower(rid)
+            except Exception:
+                pass
+        # Text prompt
+        try:
+            self.static_trap_text = self.canvas.create_text(self.width//2, self.height//2, text="STATIC INTERFERENCE\nMash A / D or Left / Right to ESCAPE", fill="#cccccc", font=("Arial", 32, "bold"), justify='center')
+        except Exception:
+            self.static_trap_text = None
+        # Ensure overlay behind text
+        if self.static_trap_overlay:
+            try: self.canvas.tag_lower(self.static_trap_overlay)
+            except Exception: pass
+        # capture last key None
+        self._static_trap_last_key = None
+
+    def _handle_static_trap_key(self, event):
+        if not self.static_trap_active:
+            return
+        key = event.keysym.lower()
+        if key in ('left','a','right','d'):
+            if self._static_trap_last_key is None or (key in ('left','a') and self._static_trap_last_key in ('right','d')) or (key in ('right','d') and self._static_trap_last_key in ('left','a')):
+                # alternate increases progress more
+                self.static_trap_progress += 0.065
+            else:
+                self.static_trap_progress += 0.025
+            self._static_trap_last_key = key
+            if self.static_trap_progress >= 1.0:
+                self.end_static_trap(escaped=True)
+            else:
+                # update text with progress
+                if self.static_trap_text:
+                    try:
+                        remain = max(0.0, self.static_trap_end_time - time.time())
+                        self.canvas.itemconfig(self.static_trap_text, text=f"STATIC INTERFERENCE\nESCAPE {int(self.static_trap_progress*100)}% | {remain:0.1f}s")
+                    except Exception:
+                        pass
+
+    def _update_static_trap(self):
+        # countdown & animate noise flicker
+        now = time.time()
+        if now >= self.static_trap_end_time:
+            self.end_static_trap(escaped=False)
+            return
+        # flicker: randomly hide/show subset
+        import random as _r
+        for rid in self.static_trap_noise_items:
+            try:
+                if _r.random() < 0.1:
+                    state = 'hidden' if _r.random() < 0.5 else 'normal'
+                    self.canvas.itemconfig(rid, state=state)
+            except Exception:
+                pass
+        # slow auto drift to make it feel alive
+        for rid in self.static_trap_noise_items:
+            try:
+                dx = _r.randint(-1,1); dy=_r.randint(-1,1)
+                self.canvas.move(rid, dx, dy)
+            except Exception:
+                pass
+        # degrade player deco glow to grayscale effect
+        if self.player_deco_items:
+            try:
+                for did in self.player_deco_items:
+                    self.canvas.itemconfig(did, outline="#777777")
+                self.canvas.itemconfig(self.player, fill="#999999")
+            except Exception:
+                pass
+        # Update timing text if exists
+        if self.static_trap_text:
+            try:
+                remain = max(0.0, self.static_trap_end_time - now)
+                self.canvas.itemconfig(self.static_trap_text, text=f"STATIC INTERFERENCE\nESCAPE {int(self.static_trap_progress*100)}% | {remain:0.1f}s")
+            except Exception:
+                pass
+
+    def end_static_trap(self, escaped: bool):
+        if not self.static_trap_active:
+            return
+        # cleanup visuals
+        for rid in self.static_trap_noise_items:
+            try: self.canvas.delete(rid)
+            except Exception: pass
+        self.static_trap_noise_items.clear()
+        if self.static_trap_overlay:
+            try: self.canvas.delete(self.static_trap_overlay)
+            except Exception: pass
+        self.static_trap_overlay = None
+        if self.static_trap_text:
+            try: self.canvas.delete(self.static_trap_text)
+            except Exception: pass
+        self.static_trap_text = None
+        self.static_trap_active = False
+        if escaped:
+            # reward & brief invulnerability
+            self.score += 15
+            self.static_trap_invuln_end = time.time() + 2.0
+            try:
+                txt = self.canvas.create_text(self.width//2, self.height//2 - 100, text="ESCAPED +15", fill="#cccccc", font=("Arial", 28, "bold"))
+                self.canvas.after(1400, lambda tid=txt: (self.canvas.delete(tid) if self.canvas.type(tid) else None))
+            except Exception:
+                pass
+        else:
+            # failure -> immediate game over
+            self.lives = 0
+            self.end_game()
 
     # ---------------- Focus / Pulse mechanic helpers ----------------
     def _focus_key_pressed(self, event=None):
