@@ -13,6 +13,8 @@ def build():
 	sep = ';' if os.name == 'nt' else ':'
 	data_args = [
 		f"music.mp3{sep}.",
+		f"game_0v3r.mp3{sep}.",
+		f"game_0v3r_g0n333333333333.mp3{sep}.",
 		f"lore.txt{sep}.",
 		f"icon3.ico{sep}.",
 	]
@@ -28,4 +30,5 @@ def build():
 	])
 
 if __name__ == '__main__':
+
 	build()
