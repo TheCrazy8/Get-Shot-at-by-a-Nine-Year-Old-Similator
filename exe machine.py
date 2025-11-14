@@ -17,6 +17,7 @@ def build():
 		f"game_0v3r_g0n333333333333.mp3{sep}.",
 		f"lore.txt{sep}.",
 		f"icon3.ico{sep}.",
+		f"uneasy type beat.wav{sep}.",
 	]
 	# Note: Python source modules (config.py, resources.py) are bundled automatically.
 	# Explicit --add-data ensures non-Python assets are accessible to resource_path().
@@ -31,3 +32,4 @@ def build():
 
 if __name__ == '__main__':
 	build()
+
