@@ -3295,7 +3295,7 @@ class bullet_hell_game:
         # Schedule next frame (decoupled from main game loop which is halted)
         try:
             if event.type == NEXT:
-                pygame.mixer.music.load(dedmusic_path)
+                pygame.mixer.music.load(ded2music_path)
                 pygame.mixer.music.play(-1)
                 pygame.mixer.music.set_endevent(NONE)
             self.root.after(50, self.update_game_over_animation)
