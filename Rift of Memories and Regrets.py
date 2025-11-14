@@ -3276,3 +3276,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     game = bullet_hell_game(root)
     root.mainloop()
+
