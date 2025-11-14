@@ -1,6 +1,8 @@
-# Get Shot at by a Nine Year Old Similator
+# Rift of Memories & Regrets
 
 [![Build & Release](https://github.com/TheCrazy8/Get-Shot-at-by-a-Nine-Year-Old-Similator/actions/workflows/build-release.yml/badge.svg)](../../actions/workflows/build-release.yml)
+
+<iframe frameborder="0" src="https://itch.io/embed/3859663?bg_color=50002e&amp;fg_color=ffffff&amp;link_color=fa5bef&amp;border_color=6a2e67" width="552" height="167"><a href="https://the-crazy-8.itch.io/rift-of-memories-and-regrets">Rift of Memories and Regrets by The Crazy 8</a></iframe>
 
 yeah thats it :3
 
