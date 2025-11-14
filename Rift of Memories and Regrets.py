@@ -298,7 +298,7 @@ class bullet_hell_game:
             "At least it's over.",
             "Was it really worth it?",
             "ERKJHWRKJTHSLKREJGHSLFKJGHDSLFJGHSDLKFJljkdsdgfkjhdfgkjlnbxljbhslairubhALIUtaeglurelaguhgulHALFUHB",
-            "FILE J.EXE STATUS: UPLOADhED TO EXISTANCE",
+            "FILE J.EXE STATUS: UPLOADED TO EXISTANCE",
             "YOUR soul was useful for something in the end...",
             "Useless files have been purged"
         ]
