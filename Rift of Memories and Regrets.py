@@ -27,17 +27,15 @@ class bullet_hell_game:
         # Initialize pygame mixer and play music
         pygame.init()
         pygame.mixer.init()
+        self._game_over_loop_pending = False
+        self._game_over_music_started = False
+        self.main_music_path = self._resolve_asset_path("music.mp3")
+        self.game_over_music_path = self._resolve_asset_path("game_0v3r.mp3")
+        self.game_over_loop_path = self._resolve_asset_path("game_0v3r_g0n333333333333.mp3")
         try:
-            if hasattr(sys, '_MEIPASS'):
-                music_path = os.path.join(sys._MEIPASS, "music.mp3")
-                dedmusic_path = os.path.join(sys._MEIPASS, "game_0v3r.mp3")
-                ded2music_path = os.path.join(sys._MEIPASS, "game_0v3r_g0n333333333333.mp3")
-            else:
-                music_path = "music.mp3"
-                dedmusic_path = "game_0v3r.mp3"
-                ded2music_path = "game_0v3r_g0n333333333333.mp3" 
-            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.load(self.main_music_path)
             pygame.mixer.music.play(-1)  # Loop indefinitely
+            pygame.mixer.music.set_endevent()
         except Exception as e:
             print("Could not play music:", e)
         self.root = root
@@ -304,6 +302,19 @@ class bullet_hell_game:
         ]
         self.selected_game_over_message = None
         self.update_game()
+
+    def _resolve_asset_path(self, filename: str) -> str:
+        """Return an absolute path to bundled assets both in dev and PyInstaller builds."""
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, filename)
+        try:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        except Exception:
+            base_dir = os.getcwd()
+        candidate = os.path.join(base_dir, filename)
+        if os.path.exists(candidate):
+            return candidate
+        return os.path.abspath(filename)
 
     def apply_player_move(self, dx, dy):
         if self.paused or self.game_over:
@@ -606,16 +617,11 @@ class bullet_hell_game:
         # Recreate background grid before gameplay elements
         self.init_background()
         try:
-            if hasattr(sys, '_MEIPASS'):
-                music_path = os.path.join(sys._MEIPASS, "music.mp3")
-                dedmusic_path = os.path.join(sys._MEIPASS, "game_0v3r.mp3")
-                ded2music_path = os.path.join(sys._MEIPASS, "game_0v3r_g0n333333333333.mp3")
-            else:
-                music_path = "music.mp3"
-                dedmusic_path = "game_0v3r.mp3"
-                ded2music_path = "game_0v3r_g0n333333333333.mp3" 
-            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.load(self.main_music_path)
             pygame.mixer.music.play(-1)  # Loop indefinitely
+            pygame.mixer.music.set_endevent()
+            self._game_over_loop_pending = False
+            self._game_over_music_started = False
         except Exception as e:
             print("Could not play music:", e)
         # Recreate player and HUD
@@ -1614,10 +1620,9 @@ class bullet_hell_game:
             try:
                 pygame.mixer.music.stop()
                 pygame.mixer.music.unload()
-                pygame.mixer.music.load(dedmusic_path)
-                self.start_game_over_animation()
             except Exception:
                 pass
+            self.start_game_over_animation()
         else:
             # Flash player or simple feedback (placeholder)
             try:
@@ -1641,7 +1646,9 @@ class bullet_hell_game:
         try:
             pygame.mixer.music.stop()
             pygame.mixer.music.unload()
-            pygame.mixer.music.load(dedmusic_path)
+        except Exception:
+            pass
+        try:
             self.start_game_over_animation()
         except Exception:
             # Fallback minimal display
@@ -3118,9 +3125,37 @@ class bullet_hell_game:
         self.lore_last_change = now
 
     # --- Game Over Animation (particles + pulsing text) ---
+    def _start_game_over_music(self):
+        """Switch to the non-looping game-over track, then arm the loop transition."""
+        self._game_over_loop_pending = False
+        self._game_over_music_started = False
+        try:
+            pygame.mixer.music.load(self.game_over_music_path)
+            pygame.mixer.music.play()
+            self._game_over_loop_pending = True
+        except Exception as exc:
+            print("Could not play game over music:", exc)
+
+    def _process_game_over_music(self):
+        """Once the first game-over track ends, start the looping follow-up track."""
+        if not self._game_over_loop_pending:
+            return
+        try:
+            if not self._game_over_music_started:
+                if pygame.mixer.music.get_busy():
+                    self._game_over_music_started = True
+                return
+            if not pygame.mixer.music.get_busy():
+                pygame.mixer.music.load(self.game_over_loop_path)
+                pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_endevent()
+                self._game_over_loop_pending = False
+        except Exception as exc:
+            print("Could not transition game over music:", exc)
+            self._game_over_loop_pending = False
+
     def start_game_over_animation(self):
-        pygame.mixer.music.play()
-        pygame.mixer.music.set_endevent(NEXT) 
+        self._start_game_over_music()
         if getattr(self, 'go_anim_active', False):
             return
         self.go_anim_active = True
@@ -3294,10 +3329,7 @@ class bullet_hell_game:
             return
         # Schedule next frame (decoupled from main game loop which is halted)
         try:
-            if event.type == NEXT:
-                pygame.mixer.music.load(ded2music_path)
-                pygame.mixer.music.play(-1)
-                pygame.mixer.music.set_endevent(NONE)
+            self._process_game_over_music()
             self.root.after(50, self.update_game_over_animation)
         except Exception:
             pass
