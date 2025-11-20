@@ -17,6 +17,7 @@ def build():
 		f"game_0v3r_g0n333333333333.mp3{sep}.",
 		f"lore.txt{sep}.",
 		f"icon3.ico{sep}.",
+		f"icon3.png{sep}.",
 		f"uneasy type beat.wav{sep}.",
 	]
 	# Note: Python source modules (config.py, resources.py) are bundled automatically.
@@ -27,11 +28,12 @@ def build():
 		'--onefile',
 		'--windowed',
 		'--icon=icon3.ico',
-		'--splash=icon3.ico',
+		'--splash=icon3.png',
 		'--name=RiftOfMemories'
 	])
 
 if __name__ == '__main__':
 	build()
+
 
 
