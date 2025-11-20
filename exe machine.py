@@ -27,9 +27,11 @@ def build():
 		'--onefile',
 		'--windowed',
 		'--icon=icon3.ico',
+		'--splash=icon3.ico',
 		'--name=RiftOfMemories'
 	])
 
 if __name__ == '__main__':
 	build()
+
 
