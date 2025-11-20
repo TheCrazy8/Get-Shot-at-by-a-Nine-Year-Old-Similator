@@ -29,6 +29,7 @@ _tau = getattr(math, 'tau', 2 * math.pi)
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
+        pyi_splash.update_text("Loading...")
         pygame.init()
         pygame.mixer.init()
         self._game_over_loop_pending = False
@@ -3340,7 +3341,6 @@ class bullet_hell_game:
             pass
 
 if __name__ == "__main__":
-    pyi_splash.update_text("Loading...")
     root = tk.Tk()
     game = bullet_hell_game(root)
     root.mainloop()
