@@ -4,8 +4,6 @@
 
 yeah thats it :3
 
-## Releases
-
 ### Non-Windows users
 
 Use the source code (Linux / macOS users can run from source: install Python 3.11+, `pip install -r requirements.txt`, then run `python "Rift of Memories and Regrets.py"`).
