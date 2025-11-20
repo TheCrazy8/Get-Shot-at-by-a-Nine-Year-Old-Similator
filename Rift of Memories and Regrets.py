@@ -7,6 +7,7 @@ import os
 import math
 import ctypes
 from collections import deque
+import pyi_splash
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -3335,6 +3336,7 @@ class bullet_hell_game:
             pass
 
 if __name__ == "__main__":
+    pyi_splash.close()
     root = tk.Tk()
     game = bullet_hell_game(root)
     root.mainloop()
