@@ -305,6 +305,7 @@ class bullet_hell_game:
             "Useless files have been purged"
         ]
         self.selected_game_over_message = None
+        pyi_splash.close()
         self.update_game()
 
     def _resolve_asset_path(self, filename: str) -> str:
@@ -3342,5 +3343,4 @@ if __name__ == "__main__":
     pyi_splash.update_text("Loading...")
     root = tk.Tk()
     game = bullet_hell_game(root)
-    pyi_splash.close()
     root.mainloop()
