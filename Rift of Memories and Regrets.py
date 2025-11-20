@@ -7,7 +7,10 @@ import os
 import math
 import ctypes
 from collections import deque
-import pyi_splash
+try:
+    import pyi_splash
+except Exception:
+    pass
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
