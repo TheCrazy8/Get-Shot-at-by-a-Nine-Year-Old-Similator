@@ -2894,52 +2894,99 @@ class bullet_hell_game:
             pcy = (py1 + py2)/2
         except Exception:
             return
+
         radius = self.focus_pulse_radius
         radius_sq = radius * radius
         removed = 0
-        # Gather bullet containers (flatten)
-        containers = [
-            self.bullets, self.bullets2, [b for b,_ in self.triangle_bullets], [b for b,_ in self.diag_bullets],
-            self.boss_bullets, self.zigzag_bullets, self.fast_bullets, self.star_bullets, self.rect_bullets,
-            self.egg_bullets, self.quad_bullets, self.exploding_bullets, [b for b,_ in self.exploded_fragments],
-            self.bouncing_bullets, [b for b,*_ in self.homing_bullets], [b for b,*_ in self.spiral_bullets],
-            [b for b,*_ in self.radial_bullets], self.wave_bullets, [b for b,*_ in self.boomerang_bullets],
-            [b for b,*_ in self.split_bullets]
-        ]
-        # Delete bullets close to player (using bounding-box center approximation)
-        for group in containers:
-            for bid in list(group):
-                try:
-                    c = self.canvas.coords(bid if not isinstance(bid, tuple) else bid[0])
-                    if not c:
-                        continue
-                    if len(c) == 4:
-                        bx = (c[0]+c[2])/2; by = (c[1]+c[3])/2
-                    else:
-                        xs=c[0::2]; ys=c[1::2]; bx=sum(xs)/len(xs); by=sum(ys)/len(ys)
-                    dx = bx - pcx; dy = by - pcy
-                    if dx*dx + dy*dy <= radius_sq:
-                        self.canvas.delete(bid if not isinstance(bid, tuple) else bid[0])
-                        removed += 1
-                        # Remove from actual container where possible
-                        try:
-                            if bid in self.bullets: self.bullets.remove(bid)
-                        except Exception: pass
-                except Exception:
-                    pass
+
+        def within_radius(bullet_id):
+            """Return True if the bullet center is within the pulse radius."""
+            try:
+                c = self.canvas.coords(bullet_id)
+                if not c:
+                    return False
+                if len(c) == 4:
+                    bx = (c[0] + c[2]) / 2
+                    by = (c[1] + c[3]) / 2
+                else:
+                    xs = c[0::2]
+                    ys = c[1::2]
+                    bx = sum(xs) / len(xs)
+                    by = sum(ys) / len(ys)
+                dx = bx - pcx
+                dy = by - pcy
+                return dx*dx + dy*dy <= radius_sq
+            except Exception:
+                return False
+
+        def clean_simple_list(container):
+            nonlocal removed
+            for b in container[:]:
+                if within_radius(b):
+                    try:
+                        self.canvas.delete(b)
+                    except Exception:
+                        pass
+                    try:
+                        container.remove(b)
+                    except ValueError:
+                        pass
+                    removed += 1
+    
+        def clean_tuple_list(container, idx=0):
+            """For containers like [(bullet_id, ...)], delete based on container[idx]."""
+            nonlocal removed
+            for entry in container[:]:
+                b = entry[idx]
+                if within_radius(b):
+                    try:
+                        self.canvas.delete(b)
+                    except Exception:
+                        pass
+                    try:
+                        container.remove(entry)
+                    except ValueError:
+                        pass
+                    removed += 1
+    
+        # Clean each bullet family properly
+        clean_simple_list(self.bullets)
+        clean_simple_list(self.bullets2)
+        clean_tuple_list(self.triangle_bullets, 0)
+        clean_tuple_list(self.diag_bullets, 0)
+        clean_simple_list(self.boss_bullets)
+        clean_tuple_list(self.zigzag_bullets, 0)
+        clean_simple_list(self.fast_bullets)
+        clean_simple_list(self.star_bullets)
+        clean_simple_list(self.rect_bullets)
+        clean_simple_list(self.egg_bullets)
+        clean_simple_list(self.quad_bullets)
+        clean_tuple_list(self.exploding_bullets if isinstance(self.exploding_bullets, list) else [], 0)
+        clean_tuple_list(self.exploded_fragments, 0)
+        clean_tuple_list(self.bouncing_bullets, 0)
+        clean_tuple_list(self.homing_bullets, 0)
+        clean_tuple_list(self.spiral_bullets, 0)
+        clean_tuple_list(self.radial_bullets, 0)
+        clean_tuple_list(self.wave_bullets, 0)
+        clean_tuple_list(self.boomerang_bullets, 0)
+        clean_tuple_list(self.split_bullets, 0)
+
         # Score reward
         self.score += removed * 2
+
         # Visual expanding ring
         try:
-            ring = self.canvas.create_oval(pcx-10, pcy-10, pcx+10, pcy+10, outline="#66ffdd", width=3)
+            ring = self.canvas.create_oval(pcx-10, pcy-10, pcx+10, pcy+10,
+                                       outline="#66ffdd", width=3)
             self.focus_pulse_visuals.append((ring, 18, radius/18))  # life frames, grow per frame
         except Exception:
             pass
+
         # Reset charge
         self.focus_charge = 0.0
         self.focus_charge_ready = False
         self.focus_pulse_cooldown = self.focus_pulse_cooldown_time
-
+    
     def _update_focus_visuals(self):
         if not self.focus_pulse_visuals:
             return
