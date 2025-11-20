@@ -3336,8 +3336,8 @@ class bullet_hell_game:
             pass
 
 if __name__ == "__main__":
-    pyi_splash.close()
+    pyi_splash.update_text("Loading...")
     root = tk.Tk()
     game = bullet_hell_game(root)
+    pyi_splash.close()
     root.mainloop()
-
