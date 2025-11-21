@@ -123,6 +123,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          pip install Pillow
 
       - name: Build executable with PyInstaller
         run: |
@@ -155,5 +156,6 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
 
