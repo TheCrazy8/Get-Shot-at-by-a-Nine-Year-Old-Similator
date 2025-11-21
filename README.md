@@ -4,10 +4,10 @@
 
 yeah thats it :3
 
-### Non-Windows users
+### Non-Windows/Mac/Linux users
 
-Use the source code (Linux / macOS users can run from source: install Python 3.11+, `pip install -r requirements.txt`, then run `python "Rift of Memories and Regrets.py"`).
+Use the source code (other users can run from source: install Python 3.11+, `pip install -r requirements.txt`, then run `python "Rift of Memories and Regrets.py"`).
 
 ---
 
-**NOTE:** USE THE SOURCE CODE (IF NO WINDOWS SYSTEM) OR WINDOWS VERSION, AS WINDOWS VERSION IS THE MAIN VERSION
+**NOTE:** USE THE SOURCE CODE (IF NO supported system) OR ITCH.IO VERSION, AS THOSE ARE THE MAIN VERSIONS
