@@ -2852,16 +2852,23 @@ class bullet_hell_game:
             self._perform_rewind_step()
             self.root.after(50, self.update_game)
             return
+        
+        # Calculate speed multiplier once for all bullet types (optimization)
+        speed_multiplier = self.slowmo_factor if self.slowmo_active else 1.0
+        
+        # Cache player coordinates for all collision checks (major optimization)
+        try:
+            px1, py1, py2, py2 = self.canvas.coords(self.player)
+            player_coords_cached = (px1, py1, px2, py2)
+        except Exception:
+            player_coords_cached = None
+        
         # Move triangle bullets (optimized)
         triangle_speed = 7 * speed_multiplier
         for bullet_tuple in self.triangle_bullets[:]:
             bullet, direction = bullet_tuple
             self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
             if self.check_collision(bullet, player_coords_cached):
-                if not self.practice_mode:
-                    self.lives -= 1
-                    if self.lives <= 0:
-                        self.end_game()
                 self.canvas.delete(bullet)
                 self.paused = False
                 self.pause_text = None
@@ -2877,7 +2884,7 @@ class bullet_hell_game:
         new_bouncing = []
         for bullet_tuple in self.bouncing_bullets:
             bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
-            self.canvas.move(bullet, x_velocity, y_velocity)
+            self.canvas.move(bullet, x_velocity * speed_multiplier, y_velocity * speed_multiplier)
             coords = self.canvas.coords(bullet)
             if not coords:
                 continue
@@ -2897,12 +2904,9 @@ class bullet_hell_game:
                 self.canvas.delete(bullet)
                 self.score += 2
                 continue
-            # Check collision
+            # Check collision (using centralized handler for shield support)
             if self.check_collision(bullet, player_coords_cached):
-                self.lives -= 1
                 self.canvas.delete(bullet)
-                if self.lives <= 0:
-                    self.end_game()
                 continue
             # Keep bullet with updated values
             new_bouncing.append((bullet, x_velocity, y_velocity, bounces_left))
@@ -2991,8 +2995,7 @@ class bullet_hell_game:
                 self.lasers[idx] = (laser_id, y, timer)
 
         # Bullet speeds scale with difficulty
-        # Apply slow-motion factor if active (optimized - single calculation)
-        speed_multiplier = self.slowmo_factor if self.slowmo_active else 1.0
+        # (speed_multiplier and player_coords_cached already calculated earlier in update_game)
         bullet_speed = 7 * speed_multiplier
         bullet2_speed = 7 * speed_multiplier
         diag_speed = 5 * speed_multiplier
@@ -3004,13 +3007,6 @@ class bullet_hell_game:
         quad_speed = 7 * speed_multiplier
         egg_speed = 6 * speed_multiplier
         homing_speed = 6 * speed_multiplier
-        
-        # Cache player coordinates for all collision checks (major optimization)
-        try:
-            px1, py1, px2, py2 = self.canvas.coords(self.player)
-            player_coords_cached = (px1, py1, px2, py2)
-        except Exception:
-            player_coords_cached = None
 
         # Move vertical bullets (optimized with cached player coords)
         for bullet in self.bullets[:]:
