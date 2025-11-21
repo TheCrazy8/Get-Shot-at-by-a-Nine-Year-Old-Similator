@@ -1670,6 +1670,9 @@ class bullet_hell_game:
                 pass
 
     def update_game(self):
+        if pyi_splash is not None:
+            pyi_splash.close()
+            pyi_splash = None
         if self.game_over:
             return
         if self.paused:
