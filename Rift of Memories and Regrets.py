@@ -41,12 +41,22 @@ class bullet_hell_game:
         self.main_music_path = self._resolve_asset_path("music.mp3")
         self.game_over_music_path = self._resolve_asset_path("game_0v3r.mp3")
         self.game_over_loop_path = self._resolve_asset_path("game_0v3r_g0n333333333333.mp3")
-        try:
-            pygame.mixer.music.load(self.main_music_path)
-            pygame.mixer.music.play(-1)  # Loop indefinitely
-            pygame.mixer.music.set_endevent()
-        except Exception as e:
-            print("Could not play music:", e)
+        self.pause_music_path = self._resolve_asset_path("PauseLoop.mp3")
+        
+        # Settings defaults
+        self.settings = {
+            'master_volume': 0.7,
+            'music_volume': 1.0,
+            'sfx_volume': 1.0,
+            'difficulty_multiplier': 1.0,
+            'bg_color_interval': bg_color_interval,
+            'player_speed': 15
+        }
+        
+        # Music state tracking
+        self.current_music_state = None  # 'menu', 'game', 'pause', 'gameover'
+        self.previous_music_position = 0
+        
         self.root = root
         self.root.title("Rift of Memories and Regrets")
         self.root.state('zoomed')  # Maximize window (Windows only)
@@ -56,203 +66,17 @@ class bullet_hell_game:
         self.canvas = tk.Canvas(self.root, width=self.width, height=self.height, bg="black")
         self.canvas.pack(fill=tk.BOTH, expand=True)
         # Store customizable background color change interval (seconds)
-        self.bg_color_interval = bg_color_interval
-    # Initialize animated vaporwave grid background
-        self.init_background()
-        # Create player (base hitbox rectangle + decorative layers)
-        self.player = None
-        self.resetcount = 1
-        self.player_deco_items = []  # decorative shape IDs (not used for collisions)
-        self.player_glow_phase = 0.0
-        self.player_rgb_phase = 0.0  # for rainbow fill
-        self.create_player_sprite()
-        self.bullets = []
-        self.bullets2 = []
-        self.triangle_bullets = []  # [(bullet_id, direction)]
-        self.diag_bullets = []
-        self.boss_bullets = []
-        self.zigzag_bullets = []
-        self.fast_bullets = []
-        self.star_bullets = []
-        self.rect_bullets = []
-        self.egg_bullets = []
-        self.quad_bullets = []
-        self.exploding_bullets = []
-        self.exploded_fragments = []  # [(bullet_id, dx, dy)]
-        self.bouncing_bullets = []
-        self.laser_indicators = []  # [(indicator_id, y, timer)]
-        self.lasers = []  # [(laser_id, y, timer)]
-        # New bullet type state containers
-        self.homing_bullets = []      # [(bullet_id, vx, vy)] homing towards player
-        self.spiral_bullets = []      # [(bullet_id, angle, radius, ang_speed, rad_speed,   cx, cy)]
-        self.radial_bullets = []      # [(bullet_id, vx, vy)] spawned in bursts
-        # Additional new bullet type containers
-        self.wave_bullets = []        # [(bullet_id, base_x, phase, amp, vy, phase_speed)]
-        self.boomerang_bullets = []   # [(bullet_id, vy, timer, state)] state: 'down'->'up'
-        self.split_bullets = []       # [(bullet_id, timer)] splits into fragments after timer
-        self.static_bullets = []      # list of static bullet ids
-        # --- Static trap (new) ---
-        self.static_trap_active = False
-        self.static_trap_progress = 0.0   # 0..1 progress to escape
-        self.static_trap_end_time = 0.0
-        self.static_trap_time_limit = 4.0
-        self.static_trap_noise_items = []
-        self.static_trap_overlay = None
-        self.static_trap_text = None
-        self.static_trap_invuln_end = 0.0  # brief invuln after escape
-        self._static_trap_last_key = None
-    # --- Freeze power-up state ---
-        self.freeze_powerups = []      # list of canvas item ids for freeze power-ups
-        self.freeze_active = False     # currently freezing bullets
-        self.freeze_end_time = 0.0     # wall time when freeze ends
-        self.freeze_text = None        # overlay text item during freeze
-        self.freeze_overlay = None      # translucent overlay for tint
-        self.freeze_particles = []      # list of (id, vx, vy, life)
-        self.freeze_particle_spawn_accum = 0
-        # Enhanced freeze effect parameters
-        self.freeze_mode = 'full'            # 'full' or 'slow'
-        self.freeze_motion_factor = 0.25     # movement speed factor during slow variant
-        self._freeze_motion_phase_over = False  # becomes True once motion portion ends (fade-out continues)
-        # Tint fade system (0..1 progress blended towards target)
-        self.freeze_tint_progress = 0.0
-        self.freeze_tint_target = 0.0
-        self.freeze_tint_fade_speed = 0.08
-        self._last_freeze_tint_progress = -1.0
-        # Original bullet colors cache + per-category palette
-        self._bullet_original_fills = {}
-        self.freeze_tint_palette = {
-            'vertical': '#a8ecff',
-            'horizontal': '#ffd6a8',
-            'diag': '#ffa8ec',
-            'triangle': '#c0ffa8',
-            'boss': '#ffb3b3',
-            'zigzag': '#a8d4ff',
-            'fast': '#fff7a8',
-            'star': '#d9a8ff',
-            'rect': '#a8ffe8',
-            'egg': '#ffcfa8',
-            'quad': '#ffa8a8',
-            'bouncing': '#a8ffd0',
-            'exploding': '#ffe0a8',
-            'homing': '#ffa8ff',
-            'spiral': '#a8b8ff',
-            'radial': '#a8ffee',
-            'wave': '#a8ffe0',
-            'boomerang': '#ffd0ff',
-            'split': '#e0ffa8',
-            'static': '#cccccc'
-        }
-        # --- Rewind power-up state ---
-        # Rewinds all bullets' positions and states backwards in time for a short duration.
-        self.rewind_powerups = []   # canvas ids of rewind pickups
-        self.rewind_active = False
-        self.rewind_end_time = 0.0
-        self.rewind_text = None
-        # History of bullet states (list of frames). Each frame is dict of category->list of state tuples.
-        self._bullet_history = []
-        self._bullet_history_max = 180  # about 9 seconds at 50ms
-        self._rewind_pointer = None     # index into history during rewind
-        self._rewind_capture_skip = 0   # frame skip accumulator (optional throttle)
-        self._rewind_speed = 2          # frames to rewind per update tick
-        self._rewind_overlay = None
-        self.rewind_pending = False           # if collected during freeze, delay activation
-        self._pending_rewind_duration = 3.0   # queued duration
-        self._rewind_ghosts = []              # list of (ghost_id, life)
-        self._rewind_ghost_life = 10          # frames a ghost persists
-        self._rewind_ghost_spawn_skip = 0     # toggle to spawn every other frame
-        self._rewind_ghost_cap = 300          # maximum ghost trail items to retain
-        # Rewind sounds (lazy loaded)
-        self._rewind_start_sound = None
-        self._rewind_end_sound = None
-        # Rewind bonus + visuals
-        self._rewind_start_bullet_count = 0
-        self._rewind_bonus_factor = 0.2   # 20% of bullets count (rounded) as score bonus
-        self._rewind_vignette_ids = []
-        self.rewind_pending_text = None
-        # Audio freeze feedback
-        self._music_prev_volume = None
-        self._music_volume_restore_active = False
-        self.score = 0
-        self.timee = int(time.time())
-        self.dial = "Hi-hi-hi! Wanna play with me? I promise it'll be fun!"
-        self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
-        self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
-        # Text showing next pattern unlock info
-        self.pattern_display_names = {
-            'vertical': 'Vertical',
-            'horizontal': 'Horizontal',
-            'diag': 'Diagonal',
-            'triangle': 'Triangle',
-            'quad': 'Quad Cluster',
-            'zigzag': 'ZigZag',
-            'fast': 'Fast',
-            'rect': 'Wide Rectangle',
-            'star': 'Star',
-            'egg': 'Tall Egg',
-            'boss': 'Big Boss',
-            'bouncing': 'Bouncing',
-            'exploding': 'Exploding',
-            'laser': 'Laser',
-            'homing': 'Homing',
-            'spiral': 'Spiral',
-            'radial': 'Radial Burst',
-            'wave': 'Wave',
-            'boomerang': 'Boomerang',
-            'split': 'Splitter',
-            'static': 'Static Trap'
-        }
-        # Moved next pattern display to bottom center
-        self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
-        self.lives = 3
-        # Health display icon item ids (hearts). Populated by update_health_display()
-        self.health_icon_items = []
+        self.bg_color_interval = self.settings['bg_color_interval']
         
-        self.game_over = False
-        self.paused = False
-        self.pause_text = None
-        self.difficulty = 1
-        self.last_difficulty_increase = time.time()
-        self.lastdial = time.time()
-        self.root.bind("<KeyPress>", self.move_player)
-        self.root.bind("<Escape>", self.toggle_pause)
-        self.root.bind("r", self.restart_game)
-        self.root.bind("p", self.toggle_practice_mode)
-        # Debug HUD state
-        self.debug_hud_enabled = False
-        self._debug_hud_text_id = None
-        self._frame_time_buffer = deque(maxlen=120)
-        self._last_frame_time_stamp = time.perf_counter()
-        self.root.bind('<F3>', self.toggle_debug_hud)
-        # Focus / Pulse mechanic state
-        self.focus_active = False
-        self.focus_charge = 0.0  # 0..1
-        self.focus_charge_ready = False
-        self.focus_charge_threshold = 1.0
-        self.focus_charge_rate = 0.004  # per frame while holding
-        self.focus_charge_graze_bonus = 0.05
-        self.focus_pulse_cooldown = 0.0
-        self.focus_pulse_cooldown_time = 2.0  # seconds before recharge can start
-        self.focus_pulse_radius = 140
-        self.focus_pulse_visuals = []  # list of (id, life, grow_speed)
-        self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
-        self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
-        self.grazing_radius = 40
-        self.grazed_bullets = set()
-        self.graze_effect_id = None
-        self.paused_time_total = 0  # Total time spent paused
-        self.pause_start_time = None  # When pause started
-        # Initialize health display after HUD created
-        self.update_health_display()
-        # Practice mode (invincible)
-        self.practice_mode = False
-        self.practice_text = None
-        # Homing bullet tuning
-        self.homing_bullet_max_life = 180  # frames (~9s at 50ms update)
-        # Player movement speed (keyboard only)
-        self.player_speed = 15
-        # Progressive unlock times (seconds survived) for bullet categories
-        # 0: basic vertical (already active), later adds more complexity.
+        # Game state flags
+        self.in_main_menu = True
+        self.in_settings_menu = False
+        self.game_started = False
+        
+        # Menu state
+        self.pause_menu_items = []
+        
+        # Initialize unlock times
         self.unlock_times = {
             'vertical': 0,
             'horizontal': 8,
@@ -276,18 +100,33 @@ class bullet_hell_game:
             'split': 240,
             'static': 255
         }
-        # Initialize lore fragments (non-destructive)
-        try:
-            self.init_lore()
-            # Persistent lore display
-            self.lore_interval = 8
-            self.lore_last_change = time.time()
-            self.current_lore_line = None
-            self.lore_text = self.canvas.create_text(self.width//2, 50, text="", fill="#b0a8ff", font=("Courier New", 14), justify="center")
-            self.update_lore_line(force=True)
-        except Exception:
-            pass
-        # Game over flavor text list & selection holder
+        
+        # Pattern display names
+        self.pattern_display_names = {
+            'vertical': 'Vertical',
+            'horizontal': 'Horizontal',
+            'diag': 'Diagonal',
+            'triangle': 'Triangle',
+            'quad': 'Quad Cluster',
+            'zigzag': 'ZigZag',
+            'fast': 'Fast',
+            'rect': 'Wide Rectangle',
+            'star': 'Star',
+            'egg': 'Tall Egg',
+            'boss': 'Big Boss',
+            'bouncing': 'Bouncing',
+            'exploding': 'Exploding',
+            'laser': 'Laser',
+            'homing': 'Homing',
+            'spiral': 'Spiral',
+            'radial': 'Radial Burst',
+            'wave': 'Wave',
+            'boomerang': 'Boomerang',
+            'split': 'Splitter',
+            'static': 'Static Trap'
+        }
+        
+        # Game over messages
         self.game_over_messages = [
             "YOUR existence was repurposed.",
             "YOU are no longer YOU...",
@@ -309,10 +148,51 @@ class bullet_hell_game:
             "YOUR soul was useful for something in the end...",
             "Useless files have been purged"
         ]
-        self.selected_game_over_message = None
+        
+        # Bind key handlers that work globally
+        self.root.bind("<Escape>", self.toggle_pause)
+        self.root.bind("r", self.restart_game)
+        self.root.bind("p", self.toggle_practice_mode)
+        self.root.bind('<F3>', self.toggle_debug_hud)
+        
+        # Debug HUD state
+        self.debug_hud_enabled = False
+        self._debug_hud_text_id = None
+        self._frame_time_buffer = deque(maxlen=120)
+        self._last_frame_time_stamp = time.perf_counter()
+        
+        # Freeze tint palette
+        self.freeze_tint_palette = {
+            'vertical': '#a8ecff',
+            'horizontal': '#ffd6a8',
+            'diag': '#ffa8ec',
+            'triangle': '#c0ffa8',
+            'boss': '#ffb3b3',
+            'zigzag': '#a8d4ff',
+            'fast': '#fff7a8',
+            'star': '#d9a8ff',
+            'rect': '#a8ffe8',
+            'egg': '#ffcfa8',
+            'quad': '#ffa8a8',
+            'bouncing': '#a8ffd0',
+            'exploding': '#ffe0a8',
+            'homing': '#ffa8ff',
+            'spiral': '#a8b8ff',
+            'radial': '#a8ffee',
+            'wave': '#a8ffe0',
+            'boomerang': '#ffd0ff',
+            'split': '#e0ffa8',
+            'static': '#cccccc'
+        }
+        
+        # Reset count for dialog
+        self.resetcount = 1
+        
         if pyi_splash is not None:
             pyi_splash.close()
-        self.update_game()
+        
+        # Show main menu
+        self.show_main_menu()
 
     def _resolve_asset_path(self, filename: str) -> str:
         """Return an absolute path to bundled assets both in dev and PyInstaller builds."""
@@ -622,174 +502,31 @@ class bullet_hell_game:
     def restart_game(self, event=None, force=False):
         if not self.game_over and not force:
             return
+        
+        # Mark as game started
+        self.game_started = True
+        
+        # Increment reset counter
+        self.resetcount += 1
+        
         # Clear canvas
-        for item in self.canvas.find_all():
-            self.canvas.delete(item)
-        # Recreate background grid before gameplay elements
-        self.init_background()
+        self.canvas.delete("all")
+        
+        # Reinitialize game (same as start_game)
+        self._initialize_game()
+        
+        # Start game music
         try:
             pygame.mixer.music.load(self.main_music_path)
-            pygame.mixer.music.play(-1)  # Loop indefinitely
-            pygame.mixer.music.set_endevent()
+            pygame.mixer.music.play(-1)
+            self.current_music_state = 'game'
+            self.apply_volume_settings()
             self._game_over_loop_pending = False
             self._game_over_music_started = False
         except Exception as e:
-            print("Could not play music:", e)
-        # Recreate player and HUD
-    # Recreate fancy player sprite
-        self.player = None
-        self.resetcount += 1
-        self.create_player_sprite()
-        # Reset bullet containers
-        self.bullets = []
-        self.bullets2 = []
-        self.triangle_bullets = []
-        self.diag_bullets = []
-        self.boss_bullets = []
-        self.zigzag_bullets = []
-        self.fast_bullets = []
-        self.star_bullets = []
-        self.rect_bullets = []
-        self.egg_bullets = []
-        self.bouncing_bullets = []
-        self.exploding_bullets = []
-        self.exploded_fragments = []
-        self.laser_indicators = []
-        self.lasers = []
-        self.homing_bullets = []
-        self.spiral_bullets = []
-        self.radial_bullets = []
-        self.wave_bullets = []
-        self.boomerang_bullets = []
-        self.split_bullets = []
-        self.static_bullets = []
-        # clear static trap visuals/state
-        if getattr(self, 'static_trap_overlay', None):
-            try: self.canvas.delete(self.static_trap_overlay)
-            except Exception: pass
-            self.static_trap_overlay = None
-        for rid in getattr(self, 'static_trap_noise_items', []):
-            try: self.canvas.delete(rid)
-            except Exception: pass
-        self.static_trap_noise_items = []
-        if getattr(self, 'static_trap_text', None):
-            try: self.canvas.delete(self.static_trap_text)
-            except Exception: pass
-            self.static_trap_text = None
-        self.static_trap_active = False
-        self.static_trap_progress = 0.0
-        self.static_trap_invuln_end = 0.0
-        # Reset freeze power-up state
-        self.freeze_powerups = []
-        self.freeze_active = False
-        self.freeze_end_time = 0.0
-        self.freeze_text = None
-        if self.freeze_overlay:
-            try: self.canvas.delete(self.freeze_overlay)
-            except Exception: pass
-        self.freeze_overlay = None
-        for pid, *_ in getattr(self, 'freeze_particles', []):
-            try: self.canvas.delete(pid)
-            except Exception: pass
-        self.freeze_particles = []
-        # Reset rewind power-up state
-        for rid in getattr(self, 'rewind_powerups', []):
-            try: self.canvas.delete(rid)
-            except Exception: pass
-        self.rewind_powerups = []
-        self.rewind_active = False
-        self.rewind_end_time = 0.0
-        self._bullet_history = []
-        self._rewind_pointer = None
-        self.rewind_pending = False
-        self._pending_rewind_duration = 3.0
-        if hasattr(self, '_rewind_ghosts'):
-            for gid, _life in self._rewind_ghosts:
-                try: self.canvas.delete(gid)
-                except Exception: pass
-            self._rewind_ghosts = []
-        # Clear vignette & queued text
-        if hasattr(self, '_rewind_vignette_ids'):
-            for vid in self._rewind_vignette_ids:
-                try: self.canvas.delete(vid)
-                except Exception: pass
-            self._rewind_vignette_ids = []
-        if getattr(self, 'rewind_pending_text', None):
-            try: self.canvas.delete(self.rewind_pending_text)
-            except Exception: pass
-            self.rewind_pending_text = None
-        if getattr(self, '_rewind_overlay', None):
-            try: self.canvas.delete(self._rewind_overlay)
-            except Exception: pass
-            self._rewind_overlay = None
-        if getattr(self, 'rewind_text', None):
-            try: self.canvas.delete(self.rewind_text)
-            except Exception: pass
-            self.rewind_text = None
-        self.homing_bullet_max_life = 180
-        # Reset scores/timers
-        self.score = 0
-        self.timee = int(time.time())
-        self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
-        self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
-        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
-        self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
-        # Core state
-        self.lives = 3
-        # Refresh health hearts
-        if hasattr(self, 'update_health_display'):
-            self.update_health_display()
-        self.game_over = False
-        self.paused = False
-        self.pause_text = None
-        self.difficulty = 1
-        self.last_difficulty_increase = time.time()
-        self.lastdial = time.time()
-        self.paused_time_total = 0
-        self.pause_start_time = None
-        # Reset unlock schedule
-        self.unlock_times = {
-            'vertical': 0,
-            'horizontal': 8,
-            'diag': 15,
-            'triangle': 25,
-            'quad': 35,
-            'zigzag': 45,
-            'fast': 55,
-            'rect': 65,
-            'star': 75,
-            'egg': 85,
-            'boss': 95,
-            'bouncing': 110,
-            'exploding': 125,
-            'laser': 140,
-            'homing': 155,
-            'spiral': 175,
-            'radial': 195,
-            'wave': 210,
-            'boomerang': 225,
-            'split': 240
-        }
-    # Reset any previously selected game over message
-        self.selected_game_over_message = None
-        # Recreate persistent lore display after clearing canvas
-        try:
-            # Ensure lore fragments exist (init_lore is idempotent / append-only)
-            if not hasattr(self, 'lore_fragments') or self.lore_fragments is None:
-                self.init_lore()
-            # Keep existing interval if it was customized; default to 8
-            self.lore_interval = getattr(self, 'lore_interval', 8)
-            # Force an immediate refresh on first update
-            self.lore_last_change = time.time() - self.lore_interval
-            self.current_lore_line = None
-            self.lore_text = self.canvas.create_text(
-                self.width//2, 50,
-                text="", fill="#b0a8ff",
-                font=("Courier New", 14), justify="center"
-            )
-            self.update_lore_line(force=True)
-        except Exception:
-            pass
+            print("Could not play game music:", e)
+        
+        # Start game loop
         self.update_game()
 
     def shoot_quad_bullet(self):
@@ -1471,6 +1208,9 @@ class bullet_hell_game:
 
 
     def move_player(self, event):
+        # Don't process movement if not in game
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
         if self.paused or self.game_over:
             return
         # While in static trap, only count specific keys to progress, suppress movement
@@ -1486,26 +1226,643 @@ class bullet_hell_game:
             self.apply_player_move(0,-s)
         elif event.keysym in ('Down','s'):
             self.apply_player_move(0,s)
+    
+    def player_shoot(self, event=None):
+        """Player shoots a projectile upward."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if self.paused or self.game_over:
+            return
+        if self.static_trap_active:
+            return
+        
+        # Check cooldown
+        if self.shot_cooldown > 0:
+            return
+        
+        # Get player position
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2) / 2
+            pcy = (py1 + py2) / 2
+        except Exception:
+            return
+        
+        # Create shot
+        shot_size = 8
+        shot = self.canvas.create_oval(
+            pcx - shot_size // 2, pcy - shot_size // 2,
+            pcx + shot_size // 2, pcy + shot_size // 2,
+            fill="#00ffff", outline="#ffffff", width=2
+        )
+        self.player_shots.append((shot, pcx, pcy))
+        
+        # Set cooldown
+        self.shot_cooldown = self.shot_cooldown_time
+    
+    def spawn_boss(self):
+        """Spawn the boss entity."""
+        if self.boss_entity:
+            try:
+                self.canvas.delete(self.boss_entity)
+            except Exception:
+                pass
+        
+        # Create boss as a rectangle
+        self.boss_entity = self.canvas.create_rectangle(
+            self.boss_x - self.boss_width // 2,
+            self.boss_y - self.boss_height // 2,
+            self.boss_x + self.boss_width // 2,
+            self.boss_y + self.boss_height // 2,
+            fill="#ff00ff", outline="#ffffff", width=4
+        )
+    
+    def update_boss(self):
+        """Update boss movement and check collisions."""
+        if not self.boss_entity:
+            return
+        
+        # Flash effect when hit
+        if self.boss_flash_timer > 0:
+            self.boss_flash_timer -= 1
+            flash_color = "#ffffff" if self.boss_flash_timer % 4 < 2 else "#ff00ff"
+            try:
+                self.canvas.itemconfig(self.boss_entity, fill=flash_color)
+            except Exception:
+                pass
+        
+        # Move boss
+        self.boss_x += self.boss_vx
+        self.boss_y += self.boss_vy
+        
+        # Bounce off walls
+        if self.boss_x - self.boss_width // 2 < 0 or self.boss_x + self.boss_width // 2 > self.width:
+            self.boss_vx *= -1
+        if self.boss_y - self.boss_height // 2 < 50 or self.boss_y + self.boss_height // 2 > self.height // 2:
+            self.boss_vy *= -1
+        
+        # Update boss position
+        try:
+            self.canvas.coords(
+                self.boss_entity,
+                self.boss_x - self.boss_width // 2,
+                self.boss_y - self.boss_height // 2,
+                self.boss_x + self.boss_width // 2,
+                self.boss_y + self.boss_height // 2
+            )
+        except Exception:
+            pass
+        
+        # Check collision with player
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            bx1 = self.boss_x - self.boss_width // 2
+            by1 = self.boss_y - self.boss_height // 2
+            bx2 = self.boss_x + self.boss_width // 2
+            by2 = self.boss_y + self.boss_height // 2
+            
+            # Check if player and boss overlap
+            if px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1:
+                # Boss contact damage
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                    else:
+                        self.update_health_display()
+                        # Push player away from boss
+                        push_x = (px1 + px2) / 2 - self.boss_x
+                        push_y = (py1 + py2) / 2 - self.boss_y
+                        dist = _hypot(push_x, push_y) or 1
+                        self.apply_player_move(push_x / dist * 20, push_y / dist * 20)
+        except Exception:
+            pass
+    
+    def update_player_shots(self):
+        """Update player shots and check for boss hits."""
+        # Update cooldown
+        if self.shot_cooldown > 0:
+            self.shot_cooldown -= 0.05  # Frame time
+        
+        new_shots = []
+        for shot_id, sx, sy in self.player_shots:
+            # Move shot upward
+            try:
+                self.canvas.move(shot_id, 0, -self.shot_speed)
+                coords = self.canvas.coords(shot_id)
+                if not coords or coords[1] < -20:
+                    # Shot went off screen
+                    try:
+                        self.canvas.delete(shot_id)
+                    except Exception:
+                        pass
+                    continue
+                
+                # Check collision with boss
+                shot_x = (coords[0] + coords[2]) / 2
+                shot_y = (coords[1] + coords[3]) / 2
+                bx1 = self.boss_x - self.boss_width // 2
+                by1 = self.boss_y - self.boss_height // 2
+                bx2 = self.boss_x + self.boss_width // 2
+                by2 = self.boss_y + self.boss_height // 2
+                
+                if bx1 < shot_x < bx2 and by1 < shot_y < by2:
+                    # Hit the boss!
+                    self.boss_health_display += 1
+                    self.boss_flash_timer = 8
+                    self.score += 5  # Add score for hitting boss
+                    
+                    # Delete the shot
+                    try:
+                        self.canvas.delete(shot_id)
+                    except Exception:
+                        pass
+                else:
+                    # Shot still active
+                    new_shots.append((shot_id, shot_x, shot_y))
+            except Exception:
+                try:
+                    self.canvas.delete(shot_id)
+                except Exception:
+                    pass
+        
+        self.player_shots = new_shots
+    
+    def spawn_collectable(self):
+        """Spawn a random collectable item."""
+        if len(self.collected_items) >= self.total_collectables:
+            return  # All collected
+        
+        # Find an uncollected item
+        available = [item for item in self.collectable_types if item not in self.collected_items]
+        if not available:
+            return
+        
+        item_name = random.choice(available)
+        item_index = self.collectable_types.index(item_name)
+        color = self.collectable_colors[item_index]
+        
+        # Random position in top half of screen
+        x = random.randint(50, self.width - 50)
+        y = random.randint(80, self.height // 2 - 50)
+        
+        # Create different shapes for variety
+        shape_type = item_index % 5
+        if shape_type == 0:  # Circle
+            item_id = self.canvas.create_oval(
+                x - 15, y - 15, x + 15, y + 15,
+                fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 1:  # Square
+            item_id = self.canvas.create_rectangle(
+                x - 12, y - 12, x + 12, y + 12,
+                fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 2:  # Diamond
+            points = [x, y - 15, x + 15, y, x, y + 15, x - 15, y]
+            item_id = self.canvas.create_polygon(
+                points, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 3:  # Triangle
+            points = [x, y - 15, x + 13, y + 13, x - 13, y + 13]
+            item_id = self.canvas.create_polygon(
+                points, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        else:  # Hexagon
+            pts = []
+            for i in range(6):
+                angle = i * (2 * _pi / 6)
+                pts.extend([x + 14 * _cos(angle), y + 14 * _sin(angle)])
+            item_id = self.canvas.create_polygon(
+                pts, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        
+        # Add text label
+        text_id = self.canvas.create_text(
+            x, y, text=item_name[:3].upper(), fill="#000000",
+            font=("Arial", 8, "bold"), tags="collectable"
+        )
+        
+        self.collectables.append((item_id, text_id, item_name, x, y))
+    
+    def update_collectables(self):
+        """Update collectables and check for collection."""
+        # Spawn new collectable if it's time
+        if time.time() >= self.next_collectable_spawn and len(self.collected_items) < self.total_collectables:
+            if len(self.collectables) < 5:  # Max 5 on screen at once
+                self.spawn_collectable()
+                self.next_collectable_spawn = time.time() + self.collectable_spawn_interval
+        
+        # Check for collection
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2) / 2
+            pcy = (py1 + py2) / 2
+            
+            for item_id, text_id, item_name, x, y in self.collectables[:]:
+                # Check distance
+                dist = _hypot(pcx - x, pcy - y)
+                if dist < 30:  # Collection radius
+                    # Collect the item
+                    self.collected_items.add(item_name)
+                    self.score += 10  # Bonus score
+                    
+                    # Remove from canvas
+                    try:
+                        self.canvas.delete(item_id)
+                        self.canvas.delete(text_id)
+                    except Exception:
+                        pass
+                    
+                    self.collectables.remove((item_id, text_id, item_name, x, y))
+                    
+                    # Show collection message
+                    try:
+                        msg_id = self.canvas.create_text(
+                            x, y - 30, text=f"+{item_name}!",
+                            fill="#ffff00", font=("Arial", 14, "bold")
+                        )
+                        self.canvas.after(1000, lambda mid=msg_id: (self.canvas.delete(mid) if self.canvas.winfo_exists() and self.canvas.type(mid) else None))
+                    except Exception:
+                        pass
+                    
+                    # Check for win condition
+                    if len(self.collected_items) >= self.total_collectables:
+                        self.win_game()
+                    
+                    break  # Only collect one per frame
+        except Exception:
+            pass
+        
+        # Lift collectables to be visible
+        for item_id, text_id, _, _, _ in self.collectables:
+            try:
+                self.canvas.lift(item_id)
+                self.canvas.lift(text_id)
+            except Exception:
+                pass
+    
+    def win_game(self):
+        """Player collected all items and won!"""
+        self.game_over = True
+        
+        # Stop game music
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+        
+        # Clear screen
+        self.canvas.delete("all")
+        
+        # Victory gradient background
+        gradient_colors = ["#0d0221", "#4b0a67", "#8f1f85", "#d25872", "#ffaa44"]
+        bar_height = self.height // len(gradient_colors)
+        for i, color in enumerate(gradient_colors):
+            self.canvas.create_rectangle(
+                0, i * bar_height, self.width, (i + 1) * bar_height,
+                fill=color, outline=""
+            )
+        
+        # Victory stars/sparkles
+        for _ in range(100):
+            x = random.randint(0, self.width)
+            y = random.randint(0, self.height)
+            size = random.randint(2, 8)
+            brightness = random.randint(200, 255)
+            color = random.choice([f"#{brightness:02x}{brightness:02x}00",
+                                  f"#{brightness:02x}00{brightness:02x}",
+                                  f"#00{brightness:02x}{brightness:02x}"])
+            self.canvas.create_oval(x-size//2, y-size//2, x+size//2, y+size//2, fill=color, outline="")
+        
+        # Victory banner frame
+        banner_width = 700
+        banner_height = 200
+        banner_x = self.width // 2
+        banner_y = self.height // 3
+        # Outer glow
+        self.canvas.create_rectangle(
+            banner_x - banner_width // 2 - 8, banner_y - banner_height // 2 - 8,
+            banner_x + banner_width // 2 + 8, banner_y + banner_height // 2 + 8,
+            fill="#ffff88", outline=""
+        )
+        # Banner background
+        self.canvas.create_rectangle(
+            banner_x - banner_width // 2, banner_y - banner_height // 2,
+            banner_x + banner_width // 2, banner_y + banner_height // 2,
+            fill="#1a0533", outline="#ffffff", width=5
+        )
+        
+        # Win message with shadow and decorations
+        self.canvas.create_text(
+            banner_x + 5, banner_y - 20 + 5,
+            text="★ YOU WIN! ★",
+            fill="#442200", font=("Arial", 72, "bold")
+        )
+        self.canvas.create_text(
+            banner_x, banner_y - 20,
+            text="★ YOU WIN! ★",
+            fill="#ffff00", font=("Arial", 72, "bold")
+        )
+        
+        # Victory subtitle
+        self.canvas.create_text(
+            banner_x + 2, banner_y + 62,
+            text="PERFECT COLLECTION!",
+            fill="#003300", font=("Arial", 24, "bold")
+        )
+        self.canvas.create_text(
+            banner_x, banner_y + 60,
+            text="PERFECT COLLECTION!",
+            fill="#00ff00", font=("Arial", 24, "bold")
+        )
+        
+        # Stats panel
+        stats_y = self.height // 2 + 40
+        stats_width = 500
+        stats_height = 180
+        # Panel shadow
+        self.canvas.create_rectangle(
+            banner_x - stats_width // 2 + 5, stats_y + 5,
+            banner_x + stats_width // 2 + 5, stats_y + stats_height + 5,
+            fill="#000000", outline=""
+        )
+        # Panel
+        self.canvas.create_rectangle(
+            banner_x - stats_width // 2, stats_y,
+            banner_x + stats_width // 2, stats_y + stats_height,
+            fill="#0d0221", outline="#66ffdd", width=4
+        )
+        
+        # Stats text
+        self.canvas.create_text(
+            banner_x, stats_y + 30,
+            text=f"All {self.total_collectables} items collected!",
+            fill="#00ff00", font=("Arial", 28, "bold")
+        )
+        
+        self.canvas.create_text(
+            banner_x, stats_y + 75,
+            text=f"Final Score: {self.score}",
+            fill="#ffff00", font=("Arial", 32, "bold")
+        )
+        
+        self.canvas.create_text(
+            banner_x, stats_y + 120,
+            text=f"Boss Hits: {self.boss_health_display}",
+            fill="#ff00ff", font=("Arial", 24)
+        )
+        
+        # Instructions
+        self.canvas.create_text(
+            self.width // 2, self.height - 80,
+            text="Press R to play again  •  Press ESC for menu",
+            fill="#ffffff", font=("Arial", 20)
+        )
+        
+        # Decorative corner brackets
+        bracket_size = 60
+        corners = [
+            (banner_x - stats_width // 2, stats_y),
+            (banner_x + stats_width // 2, stats_y),
+            (banner_x - stats_width // 2, stats_y + stats_height),
+            (banner_x + stats_width // 2, stats_y + stats_height)
+        ]
+        for i, (cx, cy) in enumerate(corners):
+            if i == 0:  # Top-left
+                self.canvas.create_line(cx, cy, cx + bracket_size, cy, fill="#66ffdd", width=3)
+                self.canvas.create_line(cx, cy, cx, cy + bracket_size, fill="#66ffdd", width=3)
+            elif i == 1:  # Top-right
+                self.canvas.create_line(cx, cy, cx - bracket_size, cy, fill="#66ffdd", width=3)
+                self.canvas.create_line(cx, cy, cx, cy + bracket_size, fill="#66ffdd", width=3)
+            elif i == 2:  # Bottom-left
+                self.canvas.create_line(cx, cy, cx + bracket_size, cy, fill="#66ffdd", width=3)
+                self.canvas.create_line(cx, cy, cx, cy - bracket_size, fill="#66ffdd", width=3)
+            else:  # Bottom-right
+                self.canvas.create_line(cx, cy, cx - bracket_size, cy, fill="#66ffdd", width=3)
+                self.canvas.create_line(cx, cy, cx, cy - bracket_size, fill="#66ffdd", width=3)
 
     def toggle_pause(self, event=None):
-        if self.game_over:
+        if self.game_over or not self.game_started:
             return
         self.paused = not self.paused
         if self.paused:
             self.pause_start_time = time.time()
-            if not self.pause_text:
-                self.pause_text = self.canvas.create_text(self.width//2, self.height//2, text="Paused", fill="yellow", font=("Arial", 40))
+            self.show_pause_menu()
+            # Play pause music
+            try:
+                if self.current_music_state != 'pause':
+                    pygame.mixer.music.load(self.pause_music_path)
+                    pygame.mixer.music.play(-1)
+                    self.current_music_state = 'pause'
+                    self.apply_volume_settings()
+            except Exception as e:
+                print("Could not play pause music:", e)
         else:
-            if self.pause_text:
-                self.canvas.delete(self.pause_text)
-                self.pause_text = None
+            self.hide_pause_menu()
             # Add paused duration to total
             if self.pause_start_time:
                 self.paused_time_total += time.time() - self.pause_start_time
                 self.pause_start_time = None
+            # Resume game music
+            try:
+                if self.current_music_state != 'game':
+                    pygame.mixer.music.load(self.main_music_path)
+                    pygame.mixer.music.play(-1)
+                    self.current_music_state = 'game'
+                    self.apply_volume_settings()
+            except Exception as e:
+                print("Could not resume game music:", e)
         # Resume update loop if unpaused
         if not self.paused:
             self.update_game()
+    
+    def show_pause_menu(self):
+        """Display pause menu with Resume, Restart, and Quit options."""
+        # Semi-transparent overlay with vignette effect
+        try:
+            # Dark center overlay
+            overlay = self.canvas.create_rectangle(
+                0, 0, self.width, self.height,
+                fill="#000000", outline="", tags="pause_menu"
+            )
+            self.canvas.itemconfig(overlay, stipple="gray50")
+            self.pause_menu_items.append(overlay)
+            
+            # Corner vignette darkening
+            vignette_size = 200
+            for corner in [(0, 0), (self.width, 0), (0, self.height), (self.width, self.height)]:
+                vign = self.canvas.create_rectangle(
+                    corner[0] - vignette_size if corner[0] > 0 else 0,
+                    corner[1] - vignette_size if corner[1] > 0 else 0,
+                    corner[0] + vignette_size if corner[0] == 0 else self.width,
+                    corner[1] + vignette_size if corner[1] == 0 else self.height,
+                    fill="#000000", outline="", tags="pause_menu"
+                )
+                self.canvas.itemconfig(vign, stipple="gray75")
+                self.pause_menu_items.append(vign)
+        except Exception:
+            pass
+        
+        # Decorative frame around title
+        frame_width = 400
+        frame_height = 100
+        frame_x = self.width // 2
+        frame_y = self.height // 3
+        # Outer frame glow
+        outer_frame = self.canvas.create_rectangle(
+            frame_x - frame_width // 2 - 5, frame_y - frame_height // 2 - 5,
+            frame_x + frame_width // 2 + 5, frame_y + frame_height // 2 + 5,
+            outline="#ffff88", width=3, tags="pause_menu"
+        )
+        self.pause_menu_items.append(outer_frame)
+        # Inner frame
+        inner_frame = self.canvas.create_rectangle(
+            frame_x - frame_width // 2, frame_y - frame_height // 2,
+            frame_x + frame_width // 2, frame_y + frame_height // 2,
+            fill="#1a0533", outline="#ffffff", width=2, tags="pause_menu"
+        )
+        self.pause_menu_items.append(inner_frame)
+        
+        # Pause title with decorative elements
+        title_shadow = self.canvas.create_text(
+            frame_x + 3, frame_y + 3,
+            text="⏸ PAUSED ⏸",
+            fill="#220033", font=("Arial", 56, "bold"),
+            tags="pause_menu"
+        )
+        title = self.canvas.create_text(
+            frame_x, frame_y,
+            text="⏸ PAUSED ⏸",
+            fill="#ffff00", font=("Arial", 56, "bold"),
+            tags="pause_menu"
+        )
+        self.pause_menu_items.extend([title_shadow, title])
+        
+        # Buttons with enhanced styling
+        button_width = 280
+        button_height = 55
+        button_x = self.width // 2
+        button_start_y = self.height // 2
+        button_spacing = 85
+        
+        # Resume button (green with glow)
+        resume_glow = self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, button_start_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, button_start_y + button_height // 2 + 4,
+            fill="#66ff66", outline="", tags="pause_menu"
+        )
+        resume_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, button_start_y - button_height // 2,
+            button_x + button_width // 2, button_start_y + button_height // 2,
+            fill="#44ff44", outline="#ffffff", width=3, tags="pause_menu"
+        )
+        resume_shadow = self.canvas.create_text(
+            button_x + 2, button_start_y + 2,
+            text="▶ RESUME",
+            fill="#003300", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        resume_text = self.canvas.create_text(
+            button_x, button_start_y,
+            text="▶ RESUME",
+            fill="white", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        self.pause_menu_items.extend([resume_glow, resume_btn, resume_shadow, resume_text])
+        self.canvas.tag_bind(resume_btn, "<Button-1>", lambda e: self.toggle_pause())
+        
+        # Restart button (orange with glow)
+        restart_y = button_start_y + button_spacing
+        restart_glow = self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, restart_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, restart_y + button_height // 2 + 4,
+            fill="#ffcc66", outline="", tags="pause_menu"
+        )
+        restart_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, restart_y - button_height // 2,
+            button_x + button_width // 2, restart_y + button_height // 2,
+            fill="#ffaa44", outline="#ffffff", width=3, tags="pause_menu"
+        )
+        restart_shadow = self.canvas.create_text(
+            button_x + 2, restart_y + 2,
+            text="↻ RESTART",
+            fill="#332200", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        restart_text = self.canvas.create_text(
+            button_x, restart_y,
+            text="↻ RESTART",
+            fill="white", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        self.pause_menu_items.extend([restart_glow, restart_btn, restart_shadow, restart_text])
+        self.canvas.tag_bind(restart_btn, "<Button-1>", lambda e: self.restart_from_pause())
+        
+        # Quit button (red with glow)
+        quit_y = restart_y + button_spacing
+        quit_glow = self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, quit_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, quit_y + button_height // 2 + 4,
+            fill="#ff6666", outline="", tags="pause_menu"
+        )
+        quit_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, quit_y - button_height // 2,
+            button_x + button_width // 2, quit_y + button_height // 2,
+            fill="#ff4444", outline="#ffffff", width=3, tags="pause_menu"
+        )
+        quit_shadow = self.canvas.create_text(
+            button_x + 2, quit_y + 2,
+            text="✕ QUIT TO MENU",
+            fill="#330000", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        quit_text = self.canvas.create_text(
+            button_x, quit_y,
+            text="✕ QUIT TO MENU",
+            fill="white", font=("Arial", 28, "bold"),
+            tags="pause_menu"
+        )
+        self.pause_menu_items.extend([quit_glow, quit_btn, quit_shadow, quit_text])
+        self.canvas.tag_bind(quit_btn, "<Button-1>", lambda e: self.quit_to_menu())
+        
+        # Hint text at bottom
+        hint = self.canvas.create_text(
+            self.width // 2, quit_y + 80,
+            text="ESC to resume  •  Pause music playing",
+            fill="#888888", font=("Arial", 14, "italic"),
+            tags="pause_menu"
+        )
+        self.pause_menu_items.append(hint)
+        
+        # Lift all pause menu items to top
+        for item in self.pause_menu_items:
+            try:
+                self.canvas.lift(item)
+            except Exception:
+                pass
+    
+    def hide_pause_menu(self):
+        """Hide the pause menu."""
+        for item in self.pause_menu_items:
+            try:
+                self.canvas.delete(item)
+            except Exception:
+                pass
+        self.pause_menu_items.clear()
+    
+    def restart_from_pause(self):
+        """Restart game from pause menu."""
+        self.paused = False
+        self.hide_pause_menu()
+        self.restart_game(force=True)
+    
+    def quit_to_menu(self):
+        """Quit to main menu."""
+        self.paused = False
+        self.game_started = False
+        self.hide_pause_menu()
+        self.show_main_menu()
 
     def shoot_bullet(self):
         if not self.game_over:
@@ -1670,6 +2027,10 @@ class bullet_hell_game:
                 pass
 
     def update_game(self):
+        # Don't update game logic if not in game
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        
         if pyi_splash is not None:
             pyi_splash.close()
             pyi_splash = None
@@ -1699,6 +2060,12 @@ class bullet_hell_game:
         # Update focus charge accumulation & visuals
         self._update_focus_charge()
         self._update_focus_visuals()
+        
+        # Update player shots and boss
+        self.update_player_shots()
+        self.update_boss()
+        self.update_collectables()
+        
     # (Removed controller polling)
     # Background animation
         self.update_background()
@@ -1709,6 +2076,26 @@ class bullet_hell_game:
         self.canvas.lift(self.timecount)
         if hasattr(self, 'next_unlock_text'):
             self.canvas.lift(self.next_unlock_text)
+        # Update and lift boss damage counter
+        if hasattr(self, 'boss_damage_text'):
+            try:
+                self.canvas.itemconfig(self.boss_damage_text, text=f"Boss Hits: {self.boss_health_display}")
+                self.canvas.lift(self.boss_damage_text)
+            except Exception:
+                pass
+        # Update and lift collectable counter
+        if hasattr(self, 'collectable_display_text'):
+            try:
+                self.canvas.itemconfig(self.collectable_display_text, text=f"Items: {len(self.collected_items)}/{self.total_collectables}")
+                self.canvas.lift(self.collectable_display_text)
+            except Exception:
+                pass
+        # Lift boss to be visible
+        if hasattr(self, 'boss_entity') and self.boss_entity:
+            try:
+                self.canvas.lift(self.boss_entity)
+            except Exception:
+                pass
         # Ensure hearts appear on top of bullets
         if getattr(self, 'health_icon_items', None):
             for hid in self.health_icon_items:
@@ -3184,6 +3571,674 @@ class bullet_hell_game:
         except Exception:
             pass
         self.lore_last_change = now
+
+    # --- Main Menu and Settings ---
+    def show_main_menu(self):
+        """Display the main menu with Play, Settings, and Exit buttons."""
+        self.in_main_menu = True
+        self.canvas.delete("all")
+        
+        # Decorative background gradient effect (simulated with rectangles)
+        gradient_colors = ["#0d0221", "#1a0533", "#32054e", "#4b0a67"]
+        bar_height = self.height // len(gradient_colors)
+        for i, color in enumerate(gradient_colors):
+            self.canvas.create_rectangle(
+                0, i * bar_height, self.width, (i + 1) * bar_height,
+                fill=color, outline="", tags="menu"
+            )
+        
+        # Decorative corner accents
+        accent_size = 80
+        # Top-left corner
+        self.canvas.create_line(0, 0, accent_size, 0, fill="#ff55ff", width=4, tags="menu")
+        self.canvas.create_line(0, 0, 0, accent_size, fill="#66ffdd", width=4, tags="menu")
+        # Top-right corner
+        self.canvas.create_line(self.width - accent_size, 0, self.width, 0, fill="#66ffdd", width=4, tags="menu")
+        self.canvas.create_line(self.width, 0, self.width, accent_size, fill="#ff55ff", width=4, tags="menu")
+        # Bottom-left corner
+        self.canvas.create_line(0, self.height, 0, self.height - accent_size, fill="#66ffdd", width=4, tags="menu")
+        self.canvas.create_line(0, self.height, accent_size, self.height, fill="#ff55ff", width=4, tags="menu")
+        # Bottom-right corner
+        self.canvas.create_line(self.width, self.height, self.width, self.height - accent_size, fill="#ff55ff", width=4, tags="menu")
+        self.canvas.create_line(self.width - accent_size, self.height, self.width, self.height, fill="#66ffdd", width=4, tags="menu")
+        
+        # Decorative stars/particles
+        for _ in range(30):
+            x = random.randint(0, self.width)
+            y = random.randint(0, self.height)
+            size = random.randint(2, 6)
+            brightness = random.randint(150, 255)
+            color = f"#{brightness:02x}{brightness:02x}{brightness:02x}"
+            self.canvas.create_oval(x-size//2, y-size//2, x+size//2, y+size//2, fill=color, outline="", tags="menu")
+        
+        # Title with shadow effect
+        shadow_offset = 4
+        self.canvas.create_text(
+            self.width // 2 + shadow_offset, self.height // 4 + shadow_offset,
+            text="RIFT OF MEMORIES\nAND REGRETS",
+            fill="#220033", font=("Arial", 56, "bold"),
+            justify="center", tags="menu"
+        )
+        self.canvas.create_text(
+            self.width // 2, self.height // 4,
+            text="RIFT OF MEMORIES\nAND REGRETS",
+            fill="#ff55ff", font=("Arial", 56, "bold"),
+            justify="center", tags="menu"
+        )
+        
+        # Subtitle with glow effect
+        self.canvas.create_text(
+            self.width // 2 + 2, self.height // 4 + 122,
+            text="Can you escape?",
+            fill="#448866", font=("Courier New", 24),
+            tags="menu"
+        )
+        self.canvas.create_text(
+            self.width // 2, self.height // 4 + 120,
+            text="Can you escape?",
+            fill="#66ffdd", font=("Courier New", 24),
+            tags="menu"
+        )
+        
+        # Buttons with enhanced styling
+        button_width = 300
+        button_height = 60
+        button_x = self.width // 2
+        button_start_y = self.height // 2
+        button_spacing = 90
+        
+        # Play button with glow effect
+        # Outer glow
+        self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, button_start_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, button_start_y + button_height // 2 + 4,
+            fill="#ff99ff", outline="", tags="menu"
+        )
+        self.menu_play_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, button_start_y - button_height // 2,
+            button_x + button_width // 2, button_start_y + button_height // 2,
+            fill="#ff55ff", outline="#ffffff", width=3, tags="menu"
+        )
+        # Button text shadow
+        self.canvas.create_text(
+            button_x + 2, button_start_y + 2,
+            text="PLAY", fill="#330033", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        self.canvas.create_text(
+            button_x, button_start_y,
+            text="PLAY", fill="white", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        
+        # Settings button with glow effect
+        settings_y = button_start_y + button_spacing
+        self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, settings_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, settings_y + button_height // 2 + 4,
+            fill="#6677ff", outline="", tags="menu"
+        )
+        self.menu_settings_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, settings_y - button_height // 2,
+            button_x + button_width // 2, settings_y + button_height // 2,
+            fill="#4455ff", outline="#ffffff", width=3, tags="menu"
+        )
+        self.canvas.create_text(
+            button_x + 2, settings_y + 2,
+            text="SETTINGS", fill="#001133", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        self.canvas.create_text(
+            button_x, settings_y,
+            text="SETTINGS", fill="white", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        
+        # Exit button with glow effect
+        exit_y = settings_y + button_spacing
+        self.canvas.create_rectangle(
+            button_x - button_width // 2 - 4, exit_y - button_height // 2 - 4,
+            button_x + button_width // 2 + 4, exit_y + button_height // 2 + 4,
+            fill="#ff6666", outline="", tags="menu"
+        )
+        self.menu_exit_btn = self.canvas.create_rectangle(
+            button_x - button_width // 2, exit_y - button_height // 2,
+            button_x + button_width // 2, exit_y + button_height // 2,
+            fill="#ff4444", outline="#ffffff", width=3, tags="menu"
+        )
+        self.canvas.create_text(
+            button_x + 2, exit_y + 2,
+            text="EXIT", fill="#330000", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        self.canvas.create_text(
+            button_x, exit_y,
+            text="EXIT", fill="white", font=("Arial", 32, "bold"),
+            tags="menu"
+        )
+        
+        # Version/credit text at bottom
+        self.canvas.create_text(
+            self.width // 2, self.height - 20,
+            text="v1.0  |  A Bullet Hell Experience",
+            fill="#888888", font=("Arial", 12),
+            tags="menu"
+        )
+        
+        # Bind click events
+        self.canvas.tag_bind(self.menu_play_btn, "<Button-1>", lambda e: self.start_game())
+        self.canvas.tag_bind(self.menu_settings_btn, "<Button-1>", lambda e: self.show_settings_menu())
+        self.canvas.tag_bind(self.menu_exit_btn, "<Button-1>", lambda e: self.root.quit())
+        
+        # Play menu music if available
+        self.play_menu_music()
+    
+    def show_settings_menu(self):
+        """Display the settings menu with configurable options."""
+        self.in_settings_menu = True
+        self.canvas.delete("all")
+        
+        # Decorative background
+        gradient_colors = ["#0d0221", "#1a0533", "#32054e"]
+        bar_height = self.height // len(gradient_colors)
+        for i, color in enumerate(gradient_colors):
+            self.canvas.create_rectangle(
+                0, i * bar_height, self.width, (i + 1) * bar_height,
+                fill=color, outline="", tags="settings"
+            )
+        
+        # Decorative grid lines
+        for i in range(0, self.width, 40):
+            self.canvas.create_line(i, 0, i, self.height, fill="#2a1a4a", width=1, tags="settings")
+        for i in range(0, self.height, 40):
+            self.canvas.create_line(0, i, self.width, i, fill="#2a1a4a", width=1, tags="settings")
+        
+        # Title with shadow
+        self.canvas.create_text(
+            self.width // 2 + 3, 83,
+            text="SETTINGS",
+            fill="#113355", font=("Arial", 48, "bold"),
+            tags="settings"
+        )
+        self.canvas.create_text(
+            self.width // 2, 80,
+            text="SETTINGS",
+            fill="#66ffdd", font=("Arial", 48, "bold"),
+            tags="settings"
+        )
+        
+        # Settings panel background
+        panel_x = self.width // 2 - 350
+        panel_y = 150
+        panel_width = 700
+        panel_height = 400
+        # Panel shadow
+        self.canvas.create_rectangle(
+            panel_x + 5, panel_y + 5, panel_x + panel_width + 5, panel_y + panel_height + 5,
+            fill="#000000", outline="", tags="settings"
+        )
+        # Panel
+        self.canvas.create_rectangle(
+            panel_x, panel_y, panel_x + panel_width, panel_y + panel_height,
+            fill="#1a0533", outline="#66ffdd", width=3, tags="settings"
+        )
+        
+        # Settings options
+        y_pos = 210
+        y_spacing = 70
+        label_x = self.width // 2 - 250
+        value_x = self.width // 2 + 250
+        
+        # Master Volume
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="⚙ Master Volume:", fill="#ff88ff", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        self.settings_master_vol_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=f"{int(self.settings['master_volume'] * 100)}%",
+            fill="#ffff66", font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+        # Volume bar
+        bar_width = 200
+        bar_x = value_x - 250
+        filled = int(bar_width * self.settings['master_volume'])
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + bar_width, y_pos + 8,
+            fill="#333333", outline="#666666", tags="settings"
+        )
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + filled, y_pos + 8,
+            fill="#ff88ff", outline="", tags="settings"
+        )
+        
+        # Music Volume
+        y_pos += y_spacing
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="♪ Music Volume:", fill="#88ff88", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        self.settings_music_vol_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=f"{int(self.settings['music_volume'] * 100)}%",
+            fill="#ffff66", font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+        filled = int(bar_width * self.settings['music_volume'])
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + bar_width, y_pos + 8,
+            fill="#333333", outline="#666666", tags="settings"
+        )
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + filled, y_pos + 8,
+            fill="#88ff88", outline="", tags="settings"
+        )
+        
+        # SFX Volume
+        y_pos += y_spacing
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="♬ SFX Volume:", fill="#88ddff", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        self.settings_sfx_vol_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=f"{int(self.settings['sfx_volume'] * 100)}%",
+            fill="#ffff66", font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+        filled = int(bar_width * self.settings['sfx_volume'])
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + bar_width, y_pos + 8,
+            fill="#333333", outline="#666666", tags="settings"
+        )
+        self.canvas.create_rectangle(
+            bar_x, y_pos - 8, bar_x + filled, y_pos + 8,
+            fill="#88ddff", outline="", tags="settings"
+        )
+        
+        # Difficulty
+        y_pos += y_spacing
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="⚔ Difficulty:", fill="#ffaa44", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        diff_text = "Easy" if self.settings['difficulty_multiplier'] < 0.8 else \
+                   "Normal" if self.settings['difficulty_multiplier'] <= 1.2 else "Hard"
+        diff_color = "#44ff44" if diff_text == "Easy" else "#ffff44" if diff_text == "Normal" else "#ff4444"
+        self.settings_diff_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=diff_text,
+            fill=diff_color, font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+        
+        # Player Speed
+        y_pos += y_spacing
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="➤ Player Speed:", fill="#ff88dd", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        self.settings_speed_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=str(self.settings['player_speed']),
+            fill="#ffff66", font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+        
+        # Instructions box
+        y_pos += y_spacing + 20
+        inst_box_y = y_pos
+        self.canvas.create_rectangle(
+            panel_x + 20, inst_box_y, panel_x + panel_width - 20, inst_box_y + 80,
+            fill="#0d0221", outline="#ff55ff", width=2, tags="settings"
+        )
+        self.canvas.create_text(
+            self.width // 2, inst_box_y + 20,
+            text="Press 1-5 to select  •  Use [ ] to adjust",
+            fill="#aaaaaa", font=("Arial", 16),
+            justify="center", tags="settings"
+        )
+        self.canvas.create_text(
+            self.width // 2, inst_box_y + 50,
+            text="1: Master  |  2: Music  |  3: SFX  |  4: Difficulty  |  5: Speed",
+            fill="#888888", font=("Arial", 12),
+            tags="settings"
+        )
+        
+        # Back button with glow
+        back_y = self.height - 100
+        button_width = 200
+        button_height = 50
+        self.canvas.create_rectangle(
+            self.width // 2 - button_width // 2 - 3, back_y - button_height // 2 - 3,
+            self.width // 2 + button_width // 2 + 3, back_y + button_height // 2 + 3,
+            fill="#6677ff", outline="", tags="settings"
+        )
+        self.settings_back_btn = self.canvas.create_rectangle(
+            self.width // 2 - button_width // 2, back_y - button_height // 2,
+            self.width // 2 + button_width // 2, back_y + button_height // 2,
+            fill="#4455ff", outline="#ffffff", width=3, tags="settings"
+        )
+        self.canvas.create_text(
+            self.width // 2 + 2, back_y + 2,
+            text="BACK", fill="#001133", font=("Arial", 24, "bold"),
+            tags="settings"
+        )
+        self.canvas.create_text(
+            self.width // 2, back_y,
+            text="BACK", fill="white", font=("Arial", 24, "bold"),
+            tags="settings"
+        )
+        self.canvas.tag_bind(self.settings_back_btn, "<Button-1>", lambda e: self.show_main_menu())
+        
+        # Bind keys for settings adjustment
+        self.settings_selected = None
+        self.root.bind('1', lambda e: self.select_setting('master_volume'))
+        self.root.bind('2', lambda e: self.select_setting('music_volume'))
+        self.root.bind('3', lambda e: self.select_setting('sfx_volume'))
+        self.root.bind('4', lambda e: self.select_setting('difficulty'))
+        self.root.bind('5', lambda e: self.select_setting('player_speed'))
+        self.root.bind('[', lambda e: self.adjust_setting(-1))
+        self.root.bind(']', lambda e: self.adjust_setting(1))
+    
+    def select_setting(self, setting):
+        """Select a setting to adjust."""
+        if not self.in_settings_menu:
+            return
+        self.settings_selected = setting
+    
+    def adjust_setting(self, direction):
+        """Adjust the selected setting."""
+        if not self.in_settings_menu or not self.settings_selected:
+            return
+        
+        if self.settings_selected == 'master_volume':
+            self.settings['master_volume'] = max(0.0, min(1.0, self.settings['master_volume'] + direction * 0.1))
+            self.canvas.itemconfig(self.settings_master_vol_text, text=f"{int(self.settings['master_volume'] * 100)}%")
+            self.apply_volume_settings()
+        elif self.settings_selected == 'music_volume':
+            self.settings['music_volume'] = max(0.0, min(1.0, self.settings['music_volume'] + direction * 0.1))
+            self.canvas.itemconfig(self.settings_music_vol_text, text=f"{int(self.settings['music_volume'] * 100)}%")
+            self.apply_volume_settings()
+        elif self.settings_selected == 'sfx_volume':
+            self.settings['sfx_volume'] = max(0.0, min(1.0, self.settings['sfx_volume'] + direction * 0.1))
+            self.canvas.itemconfig(self.settings_sfx_vol_text, text=f"{int(self.settings['sfx_volume'] * 100)}%")
+        elif self.settings_selected == 'difficulty':
+            diff_values = [0.5, 1.0, 1.5]
+            current_idx = min(range(len(diff_values)), key=lambda i: abs(diff_values[i] - self.settings['difficulty_multiplier']))
+            new_idx = max(0, min(len(diff_values) - 1, current_idx + direction))
+            self.settings['difficulty_multiplier'] = diff_values[new_idx]
+            diff_text = "Easy" if self.settings['difficulty_multiplier'] < 0.8 else \
+                       "Normal" if self.settings['difficulty_multiplier'] <= 1.2 else "Hard"
+            self.canvas.itemconfig(self.settings_diff_text, text=diff_text)
+        elif self.settings_selected == 'player_speed':
+            self.settings['player_speed'] = max(5, min(30, self.settings['player_speed'] + direction * 2))
+            self.canvas.itemconfig(self.settings_speed_text, text=str(self.settings['player_speed']))
+            self.player_speed = self.settings['player_speed']
+    
+    def apply_volume_settings(self):
+        """Apply volume settings to music."""
+        try:
+            volume = self.settings['master_volume'] * self.settings['music_volume']
+            pygame.mixer.music.set_volume(volume)
+        except Exception:
+            pass
+    
+    def play_menu_music(self):
+        """Play menu music."""
+        if self.current_music_state == 'menu':
+            return
+        try:
+            pygame.mixer.music.load(self.main_music_path)
+            pygame.mixer.music.play(-1)
+            self.current_music_state = 'menu'
+            self.apply_volume_settings()
+        except Exception as e:
+            print("Could not play menu music:", e)
+    
+    def start_game(self):
+        """Initialize and start the game."""
+        self.in_main_menu = False
+        self.in_settings_menu = False
+        self.game_started = True
+        
+        # Unbind menu keys
+        try:
+            self.root.unbind('1')
+            self.root.unbind('2')
+            self.root.unbind('3')
+            self.root.unbind('4')
+            self.root.unbind('5')
+            self.root.unbind('[')
+            self.root.unbind(']')
+        except Exception:
+            pass
+        
+        # Bind game-specific keys (use specific keys to avoid conflicts)
+        self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
+        self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
+        self.root.bind('<space>', self.player_shoot)
+        
+        # Initialize game
+        self.canvas.delete("all")
+        self._initialize_game()
+        
+        # Start game music
+        try:
+            pygame.mixer.music.load(self.main_music_path)
+            pygame.mixer.music.play(-1)
+            self.current_music_state = 'game'
+            self.apply_volume_settings()
+        except Exception as e:
+            print("Could not play game music:", e)
+        
+        # Start game loop
+        self.update_game()
+    
+    def _initialize_game(self):
+        """Initialize all game state including player, bullets, boss, collectables, powerups, and UI elements for a new game session."""
+        # Initialize animated vaporwave grid background
+        self.init_background()
+        # Create player (base hitbox rectangle + decorative layers)
+        self.player = None
+        self.player_deco_items = []
+        self.player_glow_phase = 0.0
+        self.player_rgb_phase = 0.0
+        self.create_player_sprite()
+        
+        # Initialize all bullet containers
+        self.bullets = []
+        self.bullets2 = []
+        self.triangle_bullets = []
+        self.diag_bullets = []
+        self.boss_bullets = []
+        self.zigzag_bullets = []
+        self.fast_bullets = []
+        self.star_bullets = []
+        self.rect_bullets = []
+        self.egg_bullets = []
+        self.quad_bullets = []
+        self.exploding_bullets = []
+        self.exploded_fragments = []
+        self.bouncing_bullets = []
+        self.laser_indicators = []
+        self.lasers = []
+        self.homing_bullets = []
+        self.spiral_bullets = []
+        self.radial_bullets = []
+        self.wave_bullets = []
+        self.boomerang_bullets = []
+        self.split_bullets = []
+        self.static_bullets = []
+        
+        # Initialize player shooting system
+        self.player_shots = []  # [(shot_id, x, y)]
+        self.shot_speed = 12
+        self.shot_cooldown = 0
+        self.shot_cooldown_time = 0.15  # seconds between shots
+        
+        # Initialize collectables system
+        self.collectables = []  # List of active collectable item IDs
+        self.collected_items = set()  # Set of collected item names
+        self.total_collectables = 50
+        self.collectable_types = [
+            "Star", "Moon", "Sun", "Comet", "Galaxy",
+            "Ruby", "Emerald", "Sapphire", "Diamond", "Topaz",
+            "Crown", "Scepter", "Shield", "Sword", "Amulet",
+            "Book", "Scroll", "Quill", "Inkwell", "Candle",
+            "Rose", "Lily", "Orchid", "Daisy", "Tulip",
+            "Key", "Lock", "Chain", "Ring", "Pendant",
+            "Feather", "Shell", "Pearl", "Coral", "Fossil",
+            "Hourglass", "Compass", "Telescope", "Lens", "Prism",
+            "Coin", "Gem", "Ore", "Crystal", "Shard",
+            "Mask", "Mirror", "Portrait", "Statue", "Vase"
+        ]
+        self.collectable_colors = [
+            "#ff0000", "#ff8800", "#ffff00", "#88ff00", "#00ff00",
+            "#00ff88", "#00ffff", "#0088ff", "#0000ff", "#8800ff",
+            "#ff00ff", "#ff0088", "#ff4444", "#ff8844", "#ffff44",
+            "#88ff44", "#44ff44", "#44ff88", "#44ffff", "#4488ff",
+            "#4444ff", "#8844ff", "#ff44ff", "#ff4488", "#ffaaaa",
+            "#ffddaa", "#ffffaa", "#aaffaa", "#aaeeaa", "#aaffdd",
+            "#aaffff", "#aaddff", "#aaaaff", "#ddaaff", "#ffaaff",
+            "#ffaadd", "#cc8888", "#ccaa88", "#cccc88", "#aacc88",
+            "#88cc88", "#88ccaa", "#88cccc", "#88aacc", "#8888cc",
+            "#aa88cc", "#cc88cc", "#cc88aa", "#dddddd", "#bbbbbb"
+        ]
+        self.next_collectable_spawn = time.time() + 3  # First spawn after 3 seconds
+        self.collectable_spawn_interval = 5  # Spawn every 5 seconds
+        self.collectable_display_text = None
+        
+        # Initialize boss
+        self.boss_entity = None
+        self.boss_x = self.width // 2
+        self.boss_y = 100
+        self.boss_width = 80
+        self.boss_height = 80
+        self.boss_vx = 3
+        self.boss_vy = 2
+        self.boss_health_display = 0  # Visual "damage" counter
+        self.boss_flash_timer = 0
+        self.spawn_boss()
+        
+        # Initialize static trap state
+        self.static_trap_active = False
+        self.static_trap_progress = 0.0
+        self.static_trap_end_time = 0.0
+        self.static_trap_time_limit = 4.0
+        self.static_trap_noise_items = []
+        self.static_trap_overlay = None
+        self.static_trap_text = None
+        self.static_trap_invuln_end = 0.0
+        self._static_trap_last_key = None
+        
+        # Initialize freeze state
+        self.freeze_powerups = []
+        self.freeze_active = False
+        self.freeze_end_time = 0.0
+        self.freeze_text = None
+        self.freeze_overlay = None
+        self.freeze_particles = []
+        self.freeze_particle_spawn_accum = 0
+        self.freeze_mode = 'full'
+        self.freeze_motion_factor = 0.25
+        self._freeze_motion_phase_over = False
+        self.freeze_tint_progress = 0.0
+        self.freeze_tint_target = 0.0
+        self.freeze_tint_fade_speed = 0.08
+        self._last_freeze_tint_progress = -1.0
+        self._bullet_original_fills = {}
+        
+        # Initialize rewind state
+        self.rewind_powerups = []
+        self.rewind_active = False
+        self.rewind_end_time = 0.0
+        self.rewind_text = None
+        self._bullet_history = []
+        self._bullet_history_max = 180
+        self._rewind_pointer = None
+        self._rewind_capture_skip = 0
+        self._rewind_speed = 2
+        self._rewind_overlay = None
+        self.rewind_pending = False
+        self._pending_rewind_duration = 3.0
+        self._rewind_ghosts = []
+        self._rewind_ghost_life = 10
+        self._rewind_ghost_spawn_skip = 0
+        self._rewind_ghost_cap = 300
+        self._rewind_start_sound = None
+        self._rewind_end_sound = None
+        self._rewind_start_bullet_count = 0
+        self._rewind_bonus_factor = 0.2
+        self._rewind_vignette_ids = []
+        self.rewind_pending_text = None
+        self._music_prev_volume = None
+        self._music_volume_restore_active = False
+        
+        # Initialize game state
+        self.score = 0
+        self.timee = int(time.time())
+        self.dial = "Hi-hi-hi! Wanna play with me? I promise it'll be fun!"
+        self.scorecount = self.canvas.create_text(70, 20, text=f"Score: {self.score}", fill="white", font=("Arial", 16))
+        self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
+        self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
+        self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
+        self.boss_damage_text = self.canvas.create_text(self.width-70, 50, text=f"Boss Hits: {self.boss_health_display}", fill="#ff00ff", font=("Arial", 16))
+        self.collectable_display_text = self.canvas.create_text(70, 50, text=f"Items: {len(self.collected_items)}/{self.total_collectables}", fill="#ffff00", font=("Arial", 16))
+        
+        self.lives = 3
+        self.health_icon_items = []
+        self.update_health_display()
+        
+        self.game_over = False
+        self.paused = False
+        self.pause_text = None
+        self.pause_menu_items = []
+        self.difficulty = 1
+        self.last_difficulty_increase = time.time()
+        self.lastdial = time.time()
+        
+        # Focus/Pulse state
+        self.focus_active = False
+        self.focus_charge = 0.0
+        self.focus_charge_ready = False
+        self.focus_charge_threshold = 1.0
+        self.focus_charge_rate = 0.004
+        self.focus_charge_graze_bonus = 0.05
+        self.focus_pulse_cooldown = 0.0
+        self.focus_pulse_cooldown_time = 2.0
+        self.focus_pulse_radius = 140
+        self.focus_pulse_visuals = []
+        
+        self.grazing_radius = 40
+        self.grazed_bullets = set()
+        self.graze_effect_id = None
+        self.paused_time_total = 0
+        self.pause_start_time = None
+        
+        self.practice_mode = False
+        self.practice_text = None
+        self.homing_bullet_max_life = 180
+        self.player_speed = self.settings['player_speed']
+        
+        # Initialize lore
+        try:
+            self.init_lore()
+            self.lore_interval = 8
+            self.lore_last_change = time.time()
+            self.current_lore_line = None
+            self.lore_text = self.canvas.create_text(self.width//2, 50, text="", fill="#b0a8ff", font=("Courier New", 14), justify="center")
+            self.update_lore_line(force=True)
+        except Exception:
+            pass
+        
+        self.selected_game_over_message = None
 
     # --- Game Over Animation (particles + pulsing text) ---
     def _start_game_over_music(self):
