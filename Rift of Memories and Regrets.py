@@ -1208,6 +1208,9 @@ class bullet_hell_game:
 
 
     def move_player(self, event):
+        # Don't process movement if not in game
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
         if self.paused or self.game_over:
             return
         # While in static trap, only count specific keys to progress, suppress movement
@@ -1527,6 +1530,10 @@ class bullet_hell_game:
                 pass
 
     def update_game(self):
+        # Don't update game logic if not in game
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        
         if pyi_splash is not None:
             pyi_splash.close()
             pyi_splash = None
