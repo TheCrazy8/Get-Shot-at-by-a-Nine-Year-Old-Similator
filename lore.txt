@@ -485,6 +485,35 @@
 				"A trophy for 'Most Nearly Real'.",
 				"A sticker sheet where the last sticker refuses destiny."
 			],
+			'shield': [
+				"Hexagonal barriers tessellate YOUR uncertainty.",
+				"Protective subroutine grants mercy.exception.",
+				"A single-use armor script patches over vulnerability.",
+				"Shield protocols: absorb, flicker, dissipate.",
+				"Purple light remembers what harm feels like.",
+				"Protection.sys runs once, then uninstalls itself.",
+				"A shield that knows it's temporary.",
+				"Damage redirected to /dev/null."
+			],
+			'slowmo': [
+				"Time dilates around YOUR desperation.",
+				"Bullets trace amber streaks through thick air.",
+				"Slow-motion: when urgency stretches elastic.",
+				"Clock cycles lengthen to grant YOU clarity.",
+				"The universe yawns; projectiles drift lazily.",
+				"Orange haze: time's protest against velocity.",
+				"Momentum debates its next move.",
+				"Bullet trajectories fossilize mid-arc."
+			],
+			'powerup': [
+				"Falling gifts from a sympathetic void.",
+				"Temporary gods descend in primary colors.",
+				"Help arrives wrapped in geometry.",
+				"The game concedes YOU might need an edge.",
+				"Power-ups: apologies in neon shorthand.",
+				"Brief miracles programmed for fairness.",
+				"Aid parcels from an uncertain ally."
+			],
 			'keyword': [
 				"YOU",
 				"J",
@@ -527,6 +556,9 @@
 				"Orphan",
 				"Blackout",
 				"Soul",
-				"Obsolete"
+				"Obsolete",
+				"Shield",
+				"Slowmo",
+				"Powerup"
 			]
 		}
