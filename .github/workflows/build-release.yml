@@ -133,7 +133,7 @@ jobs:
         id: rename
         run: |
           tag="${{ github.ref_name }}"
-          dest="RiftOfMemoriesAndRegrets-macOS"
+          dest="RiftOfMemoriesAndRegretsMAC"
           cp dist/RiftOfMemories "$dest"
           chmod +x "$dest"
           echo "artifact_name=$dest" >> $GITHUB_OUTPUT
@@ -155,4 +155,5 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
