@@ -1387,6 +1387,158 @@ class bullet_hell_game:
                     pass
         
         self.player_shots = new_shots
+    
+    def spawn_collectable(self):
+        """Spawn a random collectable item."""
+        if len(self.collected_items) >= self.total_collectables:
+            return  # All collected
+        
+        # Find an uncollected item
+        available = [item for item in self.collectable_types if item not in self.collected_items]
+        if not available:
+            return
+        
+        item_name = random.choice(available)
+        item_index = self.collectable_types.index(item_name)
+        color = self.collectable_colors[item_index]
+        
+        # Random position in top half of screen
+        x = random.randint(50, self.width - 50)
+        y = random.randint(80, self.height // 2 - 50)
+        
+        # Create different shapes for variety
+        shape_type = item_index % 5
+        if shape_type == 0:  # Circle
+            item_id = self.canvas.create_oval(
+                x - 15, y - 15, x + 15, y + 15,
+                fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 1:  # Square
+            item_id = self.canvas.create_rectangle(
+                x - 12, y - 12, x + 12, y + 12,
+                fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 2:  # Diamond
+            points = [x, y - 15, x + 15, y, x, y + 15, x - 15, y]
+            item_id = self.canvas.create_polygon(
+                points, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        elif shape_type == 3:  # Triangle
+            points = [x, y - 15, x + 13, y + 13, x - 13, y + 13]
+            item_id = self.canvas.create_polygon(
+                points, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        else:  # Hexagon
+            pts = []
+            for i in range(6):
+                angle = i * (2 * math.pi / 6)
+                pts.extend([x + 14 * _cos(angle), y + 14 * _sin(angle)])
+            item_id = self.canvas.create_polygon(
+                pts, fill=color, outline="#ffffff", width=2, tags="collectable"
+            )
+        
+        # Add text label
+        text_id = self.canvas.create_text(
+            x, y, text=item_name[:3].upper(), fill="#000000",
+            font=("Arial", 8, "bold"), tags="collectable"
+        )
+        
+        self.collectables.append((item_id, text_id, item_name, x, y))
+    
+    def update_collectables(self):
+        """Update collectables and check for collection."""
+        # Spawn new collectable if it's time
+        if time.time() >= self.next_collectable_spawn and len(self.collected_items) < self.total_collectables:
+            if len(self.collectables) < 5:  # Max 5 on screen at once
+                self.spawn_collectable()
+                self.next_collectable_spawn = time.time() + self.collectable_spawn_interval
+        
+        # Check for collection
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2) / 2
+            pcy = (py1 + py2) / 2
+            
+            for item_id, text_id, item_name, x, y in self.collectables[:]:
+                # Check distance
+                dist = _hypot(pcx - x, pcy - y)
+                if dist < 30:  # Collection radius
+                    # Collect the item
+                    self.collected_items.add(item_name)
+                    self.score += 10  # Bonus score
+                    
+                    # Remove from canvas
+                    try:
+                        self.canvas.delete(item_id)
+                        self.canvas.delete(text_id)
+                    except Exception:
+                        pass
+                    
+                    self.collectables.remove((item_id, text_id, item_name, x, y))
+                    
+                    # Show collection message
+                    msg_id = self.canvas.create_text(
+                        x, y - 30, text=f"+{item_name}!",
+                        fill="#ffff00", font=("Arial", 14, "bold")
+                    )
+                    self.canvas.after(1000, lambda mid=msg_id: self.canvas.delete(mid) if self.canvas.type(mid) else None)
+                    
+                    # Check for win condition
+                    if len(self.collected_items) >= self.total_collectables:
+                        self.win_game()
+                    
+                    break  # Only collect one per frame
+        except Exception:
+            pass
+        
+        # Lift collectables to be visible
+        for item_id, text_id, _, _, _ in self.collectables:
+            try:
+                self.canvas.lift(item_id)
+                self.canvas.lift(text_id)
+            except Exception:
+                pass
+    
+    def win_game(self):
+        """Player collected all items and won!"""
+        self.game_over = True
+        
+        # Stop game music
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+        
+        # Clear screen
+        self.canvas.delete("all")
+        
+        # Create win screen
+        self.canvas.create_rectangle(0, 0, self.width, self.height, fill="#000000")
+        
+        # Win message
+        self.canvas.create_text(
+            self.width // 2, self.height // 3,
+            text="YOU WIN!",
+            fill="#ffff00", font=("Arial", 72, "bold")
+        )
+        
+        self.canvas.create_text(
+            self.width // 2, self.height // 2,
+            text=f"All {self.total_collectables} items collected!",
+            fill="#00ff00", font=("Arial", 32)
+        )
+        
+        self.canvas.create_text(
+            self.width // 2, self.height // 2 + 60,
+            text=f"Final Score: {self.score}",
+            fill="#ffffff", font=("Arial", 28)
+        )
+        
+        self.canvas.create_text(
+            self.width // 2, self.height // 2 + 120,
+            text="Press R to play again or ESC for menu",
+            fill="#aaaaaa", font=("Arial", 20)
+        )
 
     def toggle_pause(self, event=None):
         if self.game_over or not self.game_started:
@@ -1728,6 +1880,7 @@ class bullet_hell_game:
         # Update player shots and boss
         self.update_player_shots()
         self.update_boss()
+        self.update_collectables()
         
     # (Removed controller polling)
     # Background animation
@@ -1744,6 +1897,13 @@ class bullet_hell_game:
             try:
                 self.canvas.itemconfig(self.boss_damage_text, text=f"Boss Hits: {self.boss_health_display}")
                 self.canvas.lift(self.boss_damage_text)
+            except Exception:
+                pass
+        # Update and lift collectable counter
+        if hasattr(self, 'collectable_display_text'):
+            try:
+                self.canvas.itemconfig(self.collectable_display_text, text=f"Items: {len(self.collected_items)}/{self.total_collectables}")
+                self.canvas.lift(self.collectable_display_text)
             except Exception:
                 pass
         # Lift boss to be visible
@@ -3570,6 +3730,38 @@ class bullet_hell_game:
         self.shot_cooldown = 0
         self.shot_cooldown_time = 0.15  # seconds between shots
         
+        # Initialize collectables system
+        self.collectables = []  # List of active collectable item IDs
+        self.collected_items = set()  # Set of collected item names
+        self.total_collectables = 50
+        self.collectable_types = [
+            "Star", "Moon", "Sun", "Comet", "Galaxy",
+            "Ruby", "Emerald", "Sapphire", "Diamond", "Topaz",
+            "Crown", "Scepter", "Shield", "Sword", "Amulet",
+            "Book", "Scroll", "Quill", "Inkwell", "Candle",
+            "Rose", "Lily", "Orchid", "Daisy", "Tulip",
+            "Key", "Lock", "Chain", "Ring", "Pendant",
+            "Feather", "Shell", "Pearl", "Coral", "Fossil",
+            "Hourglass", "Compass", "Telescope", "Lens", "Prism",
+            "Coin", "Gem", "Ore", "Crystal", "Shard",
+            "Mask", "Mirror", "Portrait", "Statue", "Vase"
+        ]
+        self.collectable_colors = [
+            "#ff0000", "#ff8800", "#ffff00", "#88ff00", "#00ff00",
+            "#00ff88", "#00ffff", "#0088ff", "#0000ff", "#8800ff",
+            "#ff00ff", "#ff0088", "#ff4444", "#ff8844", "#ffff44",
+            "#88ff44", "#44ff44", "#44ff88", "#44ffff", "#4488ff",
+            "#4444ff", "#8844ff", "#ff44ff", "#ff4488", "#ffaaaa",
+            "#ffddaa", "#ffffaa", "#aaffaa", "#aaffaa", "#aaffdd",
+            "#aaffff", "#aaddff", "#aaaaff", "#ddaaff", "#ffaaff",
+            "#ffaadd", "#cc8888", "#ccaa88", "#cccc88", "#aacc88",
+            "#88cc88", "#88ccaa", "#88cccc", "#88aacc", "#8888cc",
+            "#aa88cc", "#cc88cc", "#cc88aa", "#dddddd", "#bbbbbb"
+        ]
+        self.next_collectable_spawn = time.time() + 3  # First spawn after 3 seconds
+        self.collectable_spawn_interval = 5  # Spawn every 5 seconds
+        self.collectable_display_text = None
+        
         # Initialize boss
         self.boss_entity = None
         self.boss_x = self.width // 2
@@ -3645,6 +3837,7 @@ class bullet_hell_game:
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
         self.boss_damage_text = self.canvas.create_text(self.width-70, 50, text=f"Boss Hits: {self.boss_health_display}", fill="#ff00ff", font=("Arial", 16))
+        self.collectable_display_text = self.canvas.create_text(70, 50, text=f"Items: {len(self.collected_items)}/{self.total_collectables}", fill="#ffff00", font=("Arial", 16))
         
         self.lives = 3
         self.health_icon_items = []
