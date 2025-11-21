@@ -2155,13 +2155,18 @@ class bullet_hell_game:
         )
         self.graze_effect_timer = 4  # Number of update cycles to show (200ms)
 
-    def check_graze(self, bullet):
-        # Returns True if bullet grazes player (close but not colliding)
+    def check_graze(self, bullet, player_coords=None):
+        """Returns True if bullet grazes player (close but not colliding).
+        player_coords: Optional cached (px1, py1, px2, py2) to avoid repeated canvas.coords calls
+        """
         bullet_coords = self.canvas.coords(bullet)
         if len(bullet_coords) < 4:
             return False  # Bullet was deleted or invalid
-        player_coords = self.canvas.coords(self.player)
-        px1, py1, px2, py2 = player_coords
+        # Use cached player coords if provided
+        if player_coords:
+            px1, py1, px2, py2 = player_coords
+        else:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
         cx = (px1 + px2) / 2
         cy = (py1 + py2) / 2
         # Handle polygons (coords > 4)
@@ -2175,13 +2180,14 @@ class bullet_hell_game:
             by = (bullet_coords[1] + bullet_coords[3]) / 2
         dist = ((cx - bx) ** 2 + (cy - by) ** 2) ** 0.5
         # Not colliding, but within grazing radius
-        if dist < self.grazing_radius + 10 and not self.check_collision(bullet):
+        if dist < self.grazing_radius + 10 and not self.check_collision(bullet, player_coords):
             return True
         return False
 
-    def check_collision(self, bullet):
+    def check_collision(self, bullet, player_coords=None):
         """Axis-aligned hitbox collision between player rectangle and a bullet shape.
         Supports ovals/rectangles (4 coords) and polygons (>=6 coords). Returns True on hit.
+        player_coords: Optional cached (px1, py1, px2, py2) to avoid repeated canvas.coords calls
         """
         if self.practice_mode or self.game_over:
             return False
@@ -2192,8 +2198,11 @@ class bullet_hell_game:
             b = self.canvas.coords(bullet)
             if not b:
                 return False
-            # Player rectangle
-            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            # Player rectangle (use cached if provided, else fetch)
+            if player_coords:
+                px1, py1, px2, py2 = player_coords
+            else:
+                px1, py1, px2, py2 = self.canvas.coords(self.player)
             # Bullet bounding box
             if len(b) == 4:
                 bx1, by1, bx2, by2 = b
@@ -2817,6 +2826,22 @@ class bullet_hell_game:
                 self._capture_bullet_snapshot()
             except Exception:
                 pass
+        
+        # Memory optimization: Periodically clean grazed_bullets set (every ~5 seconds)
+        # This prevents unbounded growth of the set which holds references to deleted bullets
+        if not hasattr(self, '_last_graze_cleanup'):
+            self._last_graze_cleanup = now
+        if now - self._last_graze_cleanup > 5.0 and len(self.grazed_bullets) > 100:
+            # Keep only bullets that still exist on canvas
+            valid_bullets = set()
+            for bid in self.grazed_bullets:
+                try:
+                    if self.canvas.coords(bid):  # Check if bullet still exists
+                        valid_bullets.add(bid)
+                except Exception:
+                    pass
+            self.grazed_bullets = valid_bullets
+            self._last_graze_cleanup = now
 
         # If freeze is active, skip movement updates for bullets (they remain frozen in place)
         if self.freeze_active:
@@ -2827,13 +2852,12 @@ class bullet_hell_game:
             self._perform_rewind_step()
             self.root.after(50, self.update_game)
             return
-        # Move triangle bullets
-        triangle_speed = 7
-
+        # Move triangle bullets (optimized)
+        triangle_speed = 7 * speed_multiplier
         for bullet_tuple in self.triangle_bullets[:]:
             bullet, direction = bullet_tuple
             self.canvas.move(bullet, triangle_speed * direction, triangle_speed)
-            if self.check_collision(bullet):
+            if self.check_collision(bullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -2844,15 +2868,19 @@ class bullet_hell_game:
                 self.triangle_bullets.remove(bullet_tuple)
             else:
                 coords = self.canvas.coords(bullet)
-                if coords[1] > self.height or coords[0] < 0 or coords[2] > self.width:
+                if coords and (coords[1] > self.height or coords[0] < 0 or coords[2] > self.width):
                     self.canvas.delete(bullet)
                     self.triangle_bullets.remove(bullet_tuple)
                     self.score += 2
-        # Move bouncing bullets
-        for bullet_tuple in self.bouncing_bullets[:]:
+        
+        # Move bouncing bullets (optimized to reduce index lookups)
+        new_bouncing = []
+        for bullet_tuple in self.bouncing_bullets:
             bullet, x_velocity, y_velocity, bounces_left = bullet_tuple
             self.canvas.move(bullet, x_velocity, y_velocity)
             coords = self.canvas.coords(bullet)
+            if not coords:
+                continue
             bounced = False
             # Bounce off left/right
             if coords[0] <= 0 or coords[2] >= self.width:
@@ -2867,18 +2895,18 @@ class bullet_hell_game:
             # Remove bullet if out of bounces
             if bounces_left < 0:
                 self.canvas.delete(bullet)
-                self.bouncing_bullets.remove(bullet_tuple)
                 self.score += 2
                 continue
-            # Update tuple with new velocities and bounces
-            idx = self.bouncing_bullets.index(bullet_tuple)
-            self.bouncing_bullets[idx] = (bullet, x_velocity, y_velocity, bounces_left)
-            if self.check_collision(bullet):
+            # Check collision
+            if self.check_collision(bullet, player_coords_cached):
                 self.lives -= 1
                 self.canvas.delete(bullet)
-                self.bouncing_bullets.remove((bullet, x_velocity, y_velocity, bounces_left))
                 if self.lives <= 0:
                     self.end_game()
+                continue
+            # Keep bullet with updated values
+            new_bouncing.append((bullet, x_velocity, y_velocity, bounces_left))
+        self.bouncing_bullets = new_bouncing
         # Move exploding bullets
         for bullet in self.exploding_bullets[:]:
             self.canvas.move(bullet, 0, 5 + self.difficulty // 3)
@@ -2963,7 +2991,7 @@ class bullet_hell_game:
                 self.lasers[idx] = (laser_id, y, timer)
 
         # Bullet speeds scale with difficulty
-        # Apply slow-motion factor if active (optimized)
+        # Apply slow-motion factor if active (optimized - single calculation)
         speed_multiplier = self.slowmo_factor if self.slowmo_active else 1.0
         bullet_speed = 7 * speed_multiplier
         bullet2_speed = 7 * speed_multiplier
@@ -2976,11 +3004,18 @@ class bullet_hell_game:
         quad_speed = 7 * speed_multiplier
         egg_speed = 6 * speed_multiplier
         homing_speed = 6 * speed_multiplier
+        
+        # Cache player coordinates for all collision checks (major optimization)
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            player_coords_cached = (px1, py1, px2, py2)
+        except Exception:
+            player_coords_cached = None
 
-        # Move vertical bullets
+        # Move vertical bullets (optimized with cached player coords)
         for bullet in self.bullets[:]:
             self.canvas.move(bullet, 0, bullet_speed)
-            if self.check_collision(bullet):
+            if self.check_collision(bullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -2992,7 +3027,7 @@ class bullet_hell_game:
                 self.bullets.remove(bullet)
                 self.score += 1
             # Grazing check
-            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+            elif self.check_graze(bullet, player_coords_cached) and bullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
@@ -3001,10 +3036,10 @@ class bullet_hell_game:
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
 
-        # Move horizontal bullets
+        # Move horizontal bullets (optimized with cached player coords)
         for bullet2 in self.bullets2[:]:
             self.canvas.move(bullet2, bullet2_speed, 0)
-            if self.check_collision(bullet2):
+            if self.check_collision(bullet2, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -3016,7 +3051,7 @@ class bullet_hell_game:
                 self.bullets2.remove(bullet2)
                 self.score += 1
             # Grazing check
-            if self.check_graze(bullet2) and bullet2 not in self.grazed_bullets:
+            elif self.check_graze(bullet2, player_coords_cached) and bullet2 not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(bullet2)
                 self.show_graze_effect()
@@ -3025,10 +3060,10 @@ class bullet_hell_game:
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
 
-        # Move egg bullets
+        # Move egg bullets (optimized with cached player coords)
         for egg_bullet in self.egg_bullets[:]:
             self.canvas.move(egg_bullet, 0, egg_speed)
-            if self.check_collision(egg_bullet):
+            if self.check_collision(egg_bullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -3040,7 +3075,7 @@ class bullet_hell_game:
                 self.egg_bullets.remove(egg_bullet)
                 self.score += 2
             # Grazing check
-            if self.check_graze(egg_bullet) and egg_bullet not in self.grazed_bullets:
+            elif self.check_graze(egg_bullet, player_coords_cached) and egg_bullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(egg_bullet)
                 self.show_graze_effect()
@@ -3049,11 +3084,11 @@ class bullet_hell_game:
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
 
-        # Move diagonal bullets
+        # Move diagonal bullets (optimized)
         for bullet_tuple in self.diag_bullets[:]:
             dbullet, direction = bullet_tuple
             self.canvas.move(dbullet, diag_speed * direction, diag_speed)
-            if self.check_collision(dbullet):
+            if self.check_collision(dbullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -3065,7 +3100,7 @@ class bullet_hell_game:
                 self.diag_bullets.remove(bullet_tuple)
                 self.score += 2
             # Grazing check
-            if self.check_graze(dbullet) and dbullet not in self.grazed_bullets:
+            elif self.check_graze(dbullet, player_coords_cached) and dbullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(dbullet)
                 self.show_graze_effect()
@@ -3074,10 +3109,10 @@ class bullet_hell_game:
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
 
-        # Move boss bullets
+        # Move boss bullets (optimized)
         for boss_bullet in self.boss_bullets[:]:
             self.canvas.move(boss_bullet, 0, boss_speed)
-            if self.check_collision(boss_bullet):
+            if self.check_collision(boss_bullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -3089,7 +3124,7 @@ class bullet_hell_game:
                 self.boss_bullets.remove(boss_bullet)
                 self.score += 5  # Boss bullets give more score
             # Grazing check
-            if self.check_graze(boss_bullet) and boss_bullet not in self.grazed_bullets:
+            elif self.check_graze(boss_bullet, player_coords_cached) and boss_bullet not in self.grazed_bullets:
                 self.score += 2
                 self.grazed_bullets.add(boss_bullet)
                 self.show_graze_effect()
@@ -3098,10 +3133,10 @@ class bullet_hell_game:
                     if self.focus_charge >= self.focus_charge_threshold:
                         self.focus_charge_ready = True
 
-        # Move quad bullets
+        # Move quad bullets (optimized)
         for bullet in self.quad_bullets[:]:
             self.canvas.move(bullet, 0, quad_speed)
-            if self.check_collision(bullet):
+            if self.check_collision(bullet, player_coords_cached):
                 if not self.practice_mode:
                     self.lives -= 1
                     if self.lives <= 0:
@@ -3113,7 +3148,7 @@ class bullet_hell_game:
                 self.quad_bullets.remove(bullet)
                 self.score += 2
             # Grazing check
-            if self.check_graze(bullet) and bullet not in self.grazed_bullets:
+            elif self.check_graze(bullet, player_coords_cached) and bullet not in self.grazed_bullets:
                 self.score += 1
                 self.grazed_bullets.add(bullet)
                 self.show_graze_effect()
