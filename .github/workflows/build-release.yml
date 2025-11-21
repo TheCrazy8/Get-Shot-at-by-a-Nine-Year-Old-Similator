@@ -1,4 +1,4 @@
-name: Build & Release Windows EXE and Linux Binary
+name: Build & Release Windows EXE, Linux Binary and macOS App
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Build executable with PyInstaller
         run: |
-          python "exe machine.py"
+          python "build executable.py"
           if (-not (Test-Path dist/RiftOfMemories.exe)) { Write-Error 'Executable not produced at dist/RiftOfMemories.exe'; exit 1 }
 
       - name: Rename artifact with version
@@ -78,7 +78,7 @@ jobs:
 
       - name: Build executable with PyInstaller
         run: |
-          python "exe machine.py"
+          python "build executable.py"
           if [ ! -f dist/RiftOfMemories ]; then echo "Executable not produced at dist/RiftOfMemories"; exit 1; fi
 
       - name: Rename artifact with version
@@ -108,4 +108,51 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-macos-app:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Build executable with PyInstaller
+        run: |
+          python "build executable.py"
+          if [ ! -f dist/RiftOfMemories ]; then echo "Executable not produced at dist/RiftOfMemories"; exit 1; fi
+
+      - name: Rename artifact with version
+        id: rename
+        run: |
+          tag="${{ github.ref_name }}"
+          dest="RiftOfMemoriesAndRegrets-macOS"
+          cp dist/RiftOfMemories "$dest"
+          chmod +x "$dest"
+          echo "artifact_name=$dest" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifact (CI)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.rename.outputs.artifact_name }}
+          path: ${{ steps.rename.outputs.artifact_name }}
+          if-no-files-found: error
+
+      - name: Create / Update GitHub Release and upload asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.rename.outputs.artifact_name }}
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
