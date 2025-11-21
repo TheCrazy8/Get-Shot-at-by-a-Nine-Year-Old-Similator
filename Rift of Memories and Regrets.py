@@ -1196,6 +1196,252 @@ class bullet_hell_game:
             except Exception: pass
         self._rewind_vignette_ids = []
 
+    # ---------------- Shield Power-Up ----------------
+    def spawn_shield_powerup(self):
+        """Spawn a shield power-up (purple hexagon) descending from top."""
+        if self.game_over:
+            return
+        x = random.randint(40, self.width - 40)
+        y = 30
+        # Create hexagon shape for shield
+        radius = 18
+        pts = []
+        for i in range(6):
+            ang = (math.pi * 2 / 6) * i + math.pi / 6  # Rotate by 30 degrees
+            px = x + _cos(ang) * radius
+            py = y + _sin(ang) * radius
+            pts.extend([px, py])
+        try:
+            s_id = self.canvas.create_polygon(pts, fill="#9966ff", outline="#ffffff", width=2)
+        except Exception:
+            s_id = self.canvas.create_oval(x-radius, y-radius, x+radius, y+radius, fill="#9966ff", outline="#ffffff")
+        self.shield_powerups.append(s_id)
+
+    def activate_shield(self):
+        """Activate shield - gives player one extra hit point that absorbs damage."""
+        if self.shield_active:
+            return  # Already have shield
+        self.shield_active = True
+        self.shield_hits_remaining = 1
+        
+        # Create visual shield indicator around player
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            shield_radius = 35
+            self.shield_visual = self.canvas.create_oval(
+                cx - shield_radius, cy - shield_radius,
+                cx + shield_radius, cy + shield_radius,
+                outline="#9966ff", width=3
+            )
+        except Exception:
+            self.shield_visual = None
+        
+        # Create shield text notification
+        try:
+            self.shield_text = self.canvas.create_text(
+                self.width//2, self.height//2 + 60,
+                text="SHIELD ACTIVE", fill="#9966ff", font=("Arial", 32, "bold")
+            )
+            # Auto-remove text after 2 seconds
+            self.shield_text_remove_time = time.time() + 2.0
+        except Exception:
+            self.shield_text = None
+        
+        # Spawn activation particles
+        self._spawn_shield_particles(cx, cy)
+        
+        # Play sound effect (optional - only if sound file exists)
+        try:
+            if self._shield_sound is None:
+                sound_path = self._resolve_asset_path('shield.wav')
+                if os.path.exists(sound_path):
+                    self._shield_sound = pygame.mixer.Sound(sound_path)
+            if self._shield_sound:
+                self._shield_sound.play()
+        except Exception:
+            pass
+
+    def _spawn_shield_particles(self, cx, cy):
+        """Spawn particle burst when shield activates."""
+        try:
+            # Spawn radial burst of particles
+            num_particles = 24
+            for i in range(num_particles):
+                ang = (math.pi * 2 / num_particles) * i
+                speed = random.uniform(3, 6)
+                vx = _cos(ang) * speed
+                vy = _sin(ang) * speed
+                size = random.randint(3, 6)
+                pid = self.canvas.create_oval(
+                    cx - size/2, cy - size/2,
+                    cx + size/2, cy + size/2,
+                    fill="#9966ff", outline=""
+                )
+                life = random.randint(15, 25)
+                self.shield_particles.append((pid, cx, cy, vx, vy, life))
+        except Exception:
+            pass
+
+    def update_shield_visual(self):
+        """Update shield visual position to follow player and pulse."""
+        if not self.shield_active or self.shield_visual is None:
+            return
+        
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            cx = (px1 + px2) / 2
+            cy = (py1 + py2) / 2
+            
+            # Pulse effect
+            pulse = (_sin(time.time() * 4) + 1) / 2  # 0..1
+            shield_radius = 35 + pulse * 5
+            
+            self.canvas.coords(
+                self.shield_visual,
+                cx - shield_radius, cy - shield_radius,
+                cx + shield_radius, cy + shield_radius
+            )
+            
+            # Color pulse
+            alpha = int(150 + pulse * 105)
+            color = f"#{alpha:02x}66ff"
+            self.canvas.itemconfig(self.shield_visual, outline=color)
+        except Exception:
+            pass
+
+    def deactivate_shield(self):
+        """Remove shield when it's used up."""
+        self.shield_active = False
+        self.shield_hits_remaining = 0
+        
+        if self.shield_visual:
+            try:
+                self.canvas.delete(self.shield_visual)
+            except Exception:
+                pass
+            self.shield_visual = None
+        
+        if self.shield_text:
+            try:
+                self.canvas.delete(self.shield_text)
+            except Exception:
+                pass
+            self.shield_text = None
+
+    # ---------------- Slow-Motion Power-Up ----------------
+    def spawn_slowmo_powerup(self):
+        """Spawn a slow-motion power-up (orange clock) descending from top."""
+        if self.game_over:
+            return
+        x = random.randint(40, self.width - 40)
+        y = 30
+        # Create clock shape (circle with clock hands)
+        radius = 18
+        try:
+            # Outer circle
+            sm_id = self.canvas.create_oval(
+                x - radius, y - radius, x + radius, y + radius,
+                fill="#ff9933", outline="#ffffff", width=2
+            )
+            # Clock hand lines (approximate)
+            hand1 = self.canvas.create_line(x, y, x, y - radius*0.6, fill="#ffffff", width=2)
+            hand2 = self.canvas.create_line(x, y, x + radius*0.4, y + radius*0.4, fill="#ffffff", width=2)
+            self.slowmo_powerups.append((sm_id, hand1, hand2))
+        except Exception:
+            sm_id = self.canvas.create_oval(x-radius, y-radius, x+radius, y+radius, fill="#ff9933", outline="#ffffff")
+            self.slowmo_powerups.append((sm_id, None, None))
+
+    def activate_slowmo(self, duration=4.0):
+        """Activate slow-motion effect - all bullets move at reduced speed."""
+        self.slowmo_active = True
+        self.slowmo_end_time = time.time() + duration
+        self.slowmo_factor = 0.35  # Bullets move at 35% speed
+        
+        # Create visual overlay
+        try:
+            self.slowmo_overlay = self.canvas.create_rectangle(
+                0, 0, self.width, self.height,
+                fill="#ff9933", outline=""
+            )
+            self.canvas.itemconfig(self.slowmo_overlay, stipple="gray25")
+            self.canvas.tag_lower(self.slowmo_overlay)
+        except Exception:
+            self.slowmo_overlay = None
+        
+        # Create text notification
+        try:
+            self.slowmo_text = self.canvas.create_text(
+                self.width//2, self.height//2 + 100,
+                text=f"SLOW MOTION {duration:.1f}s",
+                fill="#ff9933", font=("Arial", 42, "bold")
+            )
+        except Exception:
+            self.slowmo_text = None
+        
+        # Spawn activation particles across screen
+        self._spawn_slowmo_particles()
+        
+        # Play sound effect (optional - only if sound file exists)
+        try:
+            if self._slowmo_sound is None:
+                sound_path = self._resolve_asset_path('slowmo.wav')
+                if os.path.exists(sound_path):
+                    self._slowmo_sound = pygame.mixer.Sound(sound_path)
+            if self._slowmo_sound:
+                self._slowmo_sound.play()
+        except Exception:
+            pass
+        
+        # Audio feedback: slightly pitch down music (simulated via volume)
+        try:
+            if pygame.mixer.music.get_busy():
+                self._slowmo_prev_volume = pygame.mixer.music.get_volume()
+                pygame.mixer.music.set_volume(min(1.0, self._slowmo_prev_volume * 0.75))
+        except Exception:
+            pass
+
+    def _spawn_slowmo_particles(self):
+        """Spawn time-warp particles when slow-motion activates."""
+        try:
+            # Spawn particles at random positions
+            num_particles = 40
+            for _ in range(num_particles):
+                x = random.randint(0, self.width)
+                y = random.randint(0, self.height)
+                size = random.randint(2, 5)
+                pid = self.canvas.create_oval(
+                    x - size/2, y - size/2,
+                    x + size/2, y + size/2,
+                    fill="#ff9933", outline=""
+                )
+                # Slow drift
+                vx = random.uniform(-0.5, 0.5)
+                vy = random.uniform(-1, 1)
+                life = random.randint(20, 40)
+                self.slowmo_particles.append((pid, x, y, vx, vy, life))
+        except Exception:
+            pass
+
+    def deactivate_slowmo(self):
+        """End slow-motion effect."""
+        self.slowmo_active = False
+        
+        if self.slowmo_overlay:
+            try:
+                self.canvas.delete(self.slowmo_overlay)
+            except Exception:
+                pass
+            self.slowmo_overlay = None
+        
+        if self.slowmo_text:
+            try:
+                self.canvas.delete(self.slowmo_text)
+            except Exception:
+                pass
+            self.slowmo_text = None
+
     def debug_trigger_freeze(self, event=None):
         """Manual key-triggered freeze for testing (press 'f')."""
         if not self.freeze_active:
@@ -1970,6 +2216,23 @@ class bullet_hell_game:
             return False
         if self.game_over:
             return
+        
+        # Check if shield is active (optimized early return)
+        if self.shield_active and self.shield_hits_remaining > 0:
+            self.shield_hits_remaining -= 1
+            # Shield absorbed the hit
+            if self.shield_hits_remaining <= 0:
+                self.deactivate_shield()
+            # Flash shield visual to show hit
+            try:
+                if self.shield_visual:
+                    self.canvas.itemconfig(self.shield_visual, outline="#ff66ff")
+                    # Reset color after brief flash
+                    self.root.after(100, lambda: self.canvas.itemconfig(self.shield_visual, outline="#9966ff") if self.shield_visual else None)
+            except Exception:
+                pass
+            return False  # Hit was absorbed
+        
         self.lives -= 1
         # Update hearts HUD
         if hasattr(self, 'update_health_display'):
@@ -2153,6 +2416,82 @@ class bullet_hell_game:
             self._tint_all_bullets(freeze=False)
             # Spawn shatter burst effect from each bullet to show reactivation
             self._spawn_unfreeze_shatter()
+        
+        # Handle slow-motion expiration
+        if self.slowmo_active and now >= self.slowmo_end_time:
+            self.deactivate_slowmo()
+            # Restore music volume
+            try:
+                if hasattr(self, '_slowmo_prev_volume') and pygame.mixer.music.get_busy():
+                    pygame.mixer.music.set_volume(self._slowmo_prev_volume)
+            except Exception:
+                pass
+        
+        # Update shield visual position and check text removal
+        if self.shield_active:
+            self.update_shield_visual()
+            # Remove shield text after delay
+            if hasattr(self, 'shield_text_remove_time') and now >= self.shield_text_remove_time:
+                if self.shield_text:
+                    try: self.canvas.delete(self.shield_text)
+                    except Exception: pass
+                    self.shield_text = None
+        
+        # Update shield particles (optimized batch processing)
+        if self.shield_particles:
+            new_sp = []
+            for pid, x, y, vx, vy, life in self.shield_particles:
+                life -= 1
+                if life > 0:
+                    try:
+                        x += vx
+                        y += vy
+                        self.canvas.coords(pid, x-2, y-2, x+2, y+2)
+                        # Fade effect
+                        if life < 8:
+                            alpha = int(life * 31.875)  # Fade from 255 to 0
+                            self.canvas.itemconfig(pid, fill=f"#{alpha:02x}66ff")
+                        new_sp.append((pid, x, y, vx, vy, life))
+                    except Exception:
+                        try: self.canvas.delete(pid)
+                        except Exception: pass
+                else:
+                    try: self.canvas.delete(pid)
+                    except Exception: pass
+            self.shield_particles = new_sp
+        
+        # Update slow-motion particles (optimized batch processing)
+        if self.slowmo_particles:
+            new_smp = []
+            for pid, x, y, vx, vy, life in self.slowmo_particles:
+                life -= 1
+                if life > 0:
+                    try:
+                        x += vx
+                        y += vy
+                        self.canvas.coords(pid, x-2, y-2, x+2, y+2)
+                        # Fade effect
+                        if life < 10:
+                            alpha = int(life * 25.5)
+                            self.canvas.itemconfig(pid, fill=f"#ff{alpha:02x}33")
+                        new_smp.append((pid, x, y, vx, vy, life))
+                    except Exception:
+                        try: self.canvas.delete(pid)
+                        except Exception: pass
+                else:
+                    try: self.canvas.delete(pid)
+                    except Exception: pass
+            self.slowmo_particles = new_smp
+        
+        # Update slow-motion text countdown
+        if self.slowmo_active and self.slowmo_text:
+            remaining = max(0.0, self.slowmo_end_time - now)
+            try:
+                self.canvas.itemconfig(self.slowmo_text, text=f"SLOW MOTION {remaining:.1f}s")
+                self.canvas.lift(self.slowmo_text)
+            except Exception:
+                pass
+        
         # Handle rewind expiration
         if self.rewind_active and now >= self.rewind_end_time:
             self.rewind_active = False
@@ -2300,6 +2639,18 @@ class bullet_hell_game:
             # Rarer than freeze (approx one every ~70s)
             if random.randint(1, 1400) == 1 and len(self._bullet_history) > 40:
                 self.spawn_rewind_powerup()
+        
+        # --- Shield power-up spawn (optimized) ---
+        if not self.shield_active and len(self.shield_powerups) < 1:
+            # Spawn roughly every ~55s (1 in 1100 per 50ms frame)
+            if random.randint(1, 1100) == 1:
+                self.spawn_shield_powerup()
+        
+        # --- Slow-motion power-up spawn (optimized) ---
+        if not self.slowmo_active and len(self.slowmo_powerups) < 1:
+            # Spawn roughly every ~65s (1 in 1300 per 50ms frame)
+            if random.randint(1, 1300) == 1:
+                self.spawn_slowmo_powerup()
 
         # Move existing freeze power-ups downward & check collection
         for p_id in self.freeze_powerups[:]:
@@ -2349,6 +2700,71 @@ class bullet_hell_game:
                     self.rewind_powerups.remove(r_id)
             except Exception:
                 try: self.rewind_powerups.remove(r_id)
+                except Exception: pass
+        
+        # Move existing shield power-ups & check collection (optimized)
+        px1, py1, px2, py2 = self.canvas.coords(self.player)  # Cache player coords
+        for s_id in self.shield_powerups[:]:
+            try:
+                self.canvas.move(s_id, 0, 4)
+                sx1, sy1, sx2, sy2 = self.canvas.coords(s_id)
+                # Collection overlap check
+                if not (sx2 < px1 or sx1 > px2 or sy2 < py1 or sy1 > py2):
+                    self.activate_shield()
+                    try: self.canvas.delete(s_id)
+                    except Exception: pass
+                    self.shield_powerups.remove(s_id)
+                    continue
+                # Remove if off screen
+                if sy1 > self.height:
+                    try: self.canvas.delete(s_id)
+                    except Exception: pass
+                    self.shield_powerups.remove(s_id)
+            except Exception:
+                try: self.shield_powerups.remove(s_id)
+                except Exception: pass
+        
+        # Move existing slow-motion power-ups & check collection (optimized)
+        for sm_entry in self.slowmo_powerups[:]:
+            try:
+                # Handle both single ID and tuple (id, hand1, hand2)
+                if isinstance(sm_entry, tuple):
+                    sm_id, hand1, hand2 = sm_entry
+                    self.canvas.move(sm_id, 0, 4)
+                    if hand1: self.canvas.move(hand1, 0, 4)
+                    if hand2: self.canvas.move(hand2, 0, 4)
+                else:
+                    sm_id = sm_entry
+                    hand1, hand2 = None, None
+                    self.canvas.move(sm_id, 0, 4)
+                
+                smx1, smy1, smx2, smy2 = self.canvas.coords(sm_id)
+                # Collection overlap check
+                if not (smx2 < px1 or smx1 > px2 or smy2 < py1 or smy1 > py2):
+                    self.activate_slowmo()
+                    try: self.canvas.delete(sm_id)
+                    except Exception: pass
+                    if hand1:
+                        try: self.canvas.delete(hand1)
+                        except Exception: pass
+                    if hand2:
+                        try: self.canvas.delete(hand2)
+                        except Exception: pass
+                    self.slowmo_powerups.remove(sm_entry)
+                    continue
+                # Remove if off screen
+                if smy1 > self.height:
+                    try: self.canvas.delete(sm_id)
+                    except Exception: pass
+                    if hand1:
+                        try: self.canvas.delete(hand1)
+                        except Exception: pass
+                    if hand2:
+                        try: self.canvas.delete(hand2)
+                        except Exception: pass
+                    self.slowmo_powerups.remove(sm_entry)
+            except Exception:
+                try: self.slowmo_powerups.remove(sm_entry)
                 except Exception: pass
 
         # Time-based unlock gating (progressive difficulty)
@@ -2547,17 +2963,19 @@ class bullet_hell_game:
                 self.lasers[idx] = (laser_id, y, timer)
 
         # Bullet speeds scale with difficulty
-        bullet_speed = 7
-        bullet2_speed = 7
-        diag_speed = 5
-        boss_speed = 10
-        zigzag_speed = 5
-        fast_speed = 14
-        star_speed = 8
-        rect_speed = 8
-        quad_speed = 7
-        egg_speed = 6
-        homing_speed = 6
+        # Apply slow-motion factor if active (optimized)
+        speed_multiplier = self.slowmo_factor if self.slowmo_active else 1.0
+        bullet_speed = 7 * speed_multiplier
+        bullet2_speed = 7 * speed_multiplier
+        diag_speed = 5 * speed_multiplier
+        boss_speed = 10 * speed_multiplier
+        zigzag_speed = 5 * speed_multiplier
+        fast_speed = 14 * speed_multiplier
+        star_speed = 8 * speed_multiplier
+        rect_speed = 8 * speed_multiplier
+        quad_speed = 7 * speed_multiplier
+        egg_speed = 6 * speed_multiplier
+        homing_speed = 6 * speed_multiplier
 
         # Move vertical bullets
         for bullet in self.bullets[:]:
@@ -4180,6 +4598,26 @@ class bullet_hell_game:
         self.rewind_pending_text = None
         self._music_prev_volume = None
         self._music_volume_restore_active = False
+        
+        # Initialize shield state (optimized)
+        self.shield_powerups = []
+        self.shield_active = False
+        self.shield_hits_remaining = 0
+        self.shield_visual = None
+        self.shield_text = None
+        self.shield_particles = []
+        self._shield_sound = None
+        
+        # Initialize slow-motion state (optimized)
+        self.slowmo_powerups = []
+        self.slowmo_active = False
+        self.slowmo_end_time = 0.0
+        self.slowmo_factor = 0.35
+        self.slowmo_overlay = None
+        self.slowmo_text = None
+        self.slowmo_particles = []
+        self._slowmo_sound = None
+        self._slowmo_prev_volume = None
         
         # Initialize game state
         self.score = 0
