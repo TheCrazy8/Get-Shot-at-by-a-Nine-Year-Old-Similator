@@ -51,6 +51,30 @@ class bullet_hell_game:
             'difficulty_multiplier': 1.0,
             'bg_color_interval': bg_color_interval,
             'player_speed': 15
+            'unlock_times': {
+            'vertical': 0,
+            'horizontal': 8,
+            'diag': 15,
+            'triangle': 25,
+            'quad': 35,
+            'zigzag': 45,
+            'fast': 55,
+            'rect': 65,
+            'star': 75,
+            'egg': 85,
+            'boss': 95,
+            'bouncing': 110,
+            'exploding': 125,
+            'laser': 140,
+            'homing': 155,
+            'spiral': 175,
+            'radial': 195,
+            'wave': 210,
+            'boomerang': 225,
+            'split': 240,
+            'static': 255
+        },
+        
         }
         
         # Music state tracking
@@ -77,29 +101,7 @@ class bullet_hell_game:
         self.pause_menu_items = []
         
         # Initialize unlock times
-        self.unlock_times = {
-            'vertical': 0,
-            'horizontal': 8,
-            'diag': 15,
-            'triangle': 25,
-            'quad': 35,
-            'zigzag': 45,
-            'fast': 55,
-            'rect': 65,
-            'star': 75,
-            'egg': 85,
-            'boss': 95,
-            'bouncing': 110,
-            'exploding': 125,
-            'laser': 140,
-            'homing': 155,
-            'spiral': 175,
-            'radial': 195,
-            'wave': 210,
-            'boomerang': 225,
-            'split': 240,
-            'static': 255
-        }
+        self.unlock_times = self.settings['unlock_times']
         
         # Pattern display names
         self.pattern_display_names = {
@@ -1571,7 +1573,7 @@ class bullet_hell_game:
             if px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1:
                 # Boss contact damage
                 if not self.practice_mode:
-                    self.lives -= 1
+                    self.lives -= 0
                     if self.lives <= 0:
                         self.end_game()
                     else:
@@ -4336,6 +4338,21 @@ class bullet_hell_game:
         self.settings_speed_text = self.canvas.create_text(
             value_x, y_pos,
             text=str(self.settings['player_speed']),
+            fill="#ffff66", font=("Arial", 20, "bold"),
+            anchor="e", tags="settings"
+        )
+
+        
+        # Player Speed
+        y_pos += y_spacing
+        self.canvas.create_text(
+            label_x, y_pos,
+            text="Bullet Spawn Times:", fill="#ff88dd", font=("Arial", 20, "bold"),
+            anchor="w", tags="settings"
+        )
+        self.bullet_spawn_text = self.canvas.create_text(
+            value_x, y_pos,
+            text=str(self.settings['unlock_times']),
             fill="#ffff66", font=("Arial", 20, "bold"),
             anchor="e", tags="settings"
         )
