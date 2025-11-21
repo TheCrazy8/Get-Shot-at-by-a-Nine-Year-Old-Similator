@@ -1226,6 +1226,167 @@ class bullet_hell_game:
             self.apply_player_move(0,-s)
         elif event.keysym in ('Down','s'):
             self.apply_player_move(0,s)
+    
+    def player_shoot(self, event=None):
+        """Player shoots a projectile upward."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if self.paused or self.game_over:
+            return
+        if self.static_trap_active:
+            return
+        
+        # Check cooldown
+        if self.shot_cooldown > 0:
+            return
+        
+        # Get player position
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            pcx = (px1 + px2) / 2
+            pcy = (py1 + py2) / 2
+        except Exception:
+            return
+        
+        # Create shot
+        shot_size = 8
+        shot = self.canvas.create_oval(
+            pcx - shot_size // 2, pcy - shot_size // 2,
+            pcx + shot_size // 2, pcy + shot_size // 2,
+            fill="#00ffff", outline="#ffffff", width=2
+        )
+        self.player_shots.append((shot, pcx, pcy))
+        
+        # Set cooldown
+        self.shot_cooldown = self.shot_cooldown_time
+    
+    def spawn_boss(self):
+        """Spawn the boss entity."""
+        if self.boss_entity:
+            try:
+                self.canvas.delete(self.boss_entity)
+            except Exception:
+                pass
+        
+        # Create boss as a rectangle
+        self.boss_entity = self.canvas.create_rectangle(
+            self.boss_x - self.boss_width // 2,
+            self.boss_y - self.boss_height // 2,
+            self.boss_x + self.boss_width // 2,
+            self.boss_y + self.boss_height // 2,
+            fill="#ff00ff", outline="#ffffff", width=4
+        )
+    
+    def update_boss(self):
+        """Update boss movement and check collisions."""
+        if not self.boss_entity:
+            return
+        
+        # Flash effect when hit
+        if self.boss_flash_timer > 0:
+            self.boss_flash_timer -= 1
+            flash_color = "#ffffff" if self.boss_flash_timer % 4 < 2 else "#ff00ff"
+            try:
+                self.canvas.itemconfig(self.boss_entity, fill=flash_color)
+            except Exception:
+                pass
+        
+        # Move boss
+        self.boss_x += self.boss_vx
+        self.boss_y += self.boss_vy
+        
+        # Bounce off walls
+        if self.boss_x - self.boss_width // 2 < 0 or self.boss_x + self.boss_width // 2 > self.width:
+            self.boss_vx *= -1
+        if self.boss_y - self.boss_height // 2 < 50 or self.boss_y + self.boss_height // 2 > self.height // 2:
+            self.boss_vy *= -1
+        
+        # Update boss position
+        try:
+            self.canvas.coords(
+                self.boss_entity,
+                self.boss_x - self.boss_width // 2,
+                self.boss_y - self.boss_height // 2,
+                self.boss_x + self.boss_width // 2,
+                self.boss_y + self.boss_height // 2
+            )
+        except Exception:
+            pass
+        
+        # Check collision with player
+        try:
+            px1, py1, px2, py2 = self.canvas.coords(self.player)
+            bx1 = self.boss_x - self.boss_width // 2
+            by1 = self.boss_y - self.boss_height // 2
+            bx2 = self.boss_x + self.boss_width // 2
+            by2 = self.boss_y + self.boss_height // 2
+            
+            # Check if player and boss overlap
+            if px1 < bx2 and px2 > bx1 and py1 < by2 and py2 > by1:
+                # Boss contact damage
+                if not self.practice_mode:
+                    self.lives -= 1
+                    if self.lives <= 0:
+                        self.end_game()
+                    else:
+                        self.update_health_display()
+                        # Push player away from boss
+                        push_x = (px1 + px2) / 2 - self.boss_x
+                        push_y = (py1 + py2) / 2 - self.boss_y
+                        dist = _hypot(push_x, push_y) or 1
+                        self.apply_player_move(push_x / dist * 20, push_y / dist * 20)
+        except Exception:
+            pass
+    
+    def update_player_shots(self):
+        """Update player shots and check for boss hits."""
+        # Update cooldown
+        if self.shot_cooldown > 0:
+            self.shot_cooldown -= 0.05  # Frame time
+        
+        new_shots = []
+        for shot_id, sx, sy in self.player_shots:
+            # Move shot upward
+            try:
+                self.canvas.move(shot_id, 0, -self.shot_speed)
+                coords = self.canvas.coords(shot_id)
+                if not coords or coords[1] < -20:
+                    # Shot went off screen
+                    try:
+                        self.canvas.delete(shot_id)
+                    except Exception:
+                        pass
+                    continue
+                
+                # Check collision with boss
+                shot_x = (coords[0] + coords[2]) / 2
+                shot_y = (coords[1] + coords[3]) / 2
+                bx1 = self.boss_x - self.boss_width // 2
+                by1 = self.boss_y - self.boss_height // 2
+                bx2 = self.boss_x + self.boss_width // 2
+                by2 = self.boss_y + self.boss_height // 2
+                
+                if bx1 < shot_x < bx2 and by1 < shot_y < by2:
+                    # Hit the boss!
+                    self.boss_health_display += 1
+                    self.boss_flash_timer = 8
+                    self.score += 5  # Add score for hitting boss
+                    
+                    # Delete the shot
+                    try:
+                        self.canvas.delete(shot_id)
+                    except Exception:
+                        pass
+                else:
+                    # Shot still active
+                    new_shots.append((shot_id, shot_x, shot_y))
+            except Exception:
+                try:
+                    self.canvas.delete(shot_id)
+                except Exception:
+                    pass
+        
+        self.player_shots = new_shots
 
     def toggle_pause(self, event=None):
         if self.game_over or not self.game_started:
@@ -1563,6 +1724,11 @@ class bullet_hell_game:
         # Update focus charge accumulation & visuals
         self._update_focus_charge()
         self._update_focus_visuals()
+        
+        # Update player shots and boss
+        self.update_player_shots()
+        self.update_boss()
+        
     # (Removed controller polling)
     # Background animation
         self.update_background()
@@ -1573,6 +1739,19 @@ class bullet_hell_game:
         self.canvas.lift(self.timecount)
         if hasattr(self, 'next_unlock_text'):
             self.canvas.lift(self.next_unlock_text)
+        # Update and lift boss damage counter
+        if hasattr(self, 'boss_damage_text'):
+            try:
+                self.canvas.itemconfig(self.boss_damage_text, text=f"Boss Hits: {self.boss_health_display}")
+                self.canvas.lift(self.boss_damage_text)
+            except Exception:
+                pass
+        # Lift boss to be visible
+        if hasattr(self, 'boss_entity') and self.boss_entity:
+            try:
+                self.canvas.lift(self.boss_entity)
+            except Exception:
+                pass
         # Ensure hearts appear on top of bullets
         if getattr(self, 'health_icon_items', None):
             for hid in self.health_icon_items:
@@ -3328,10 +3507,10 @@ class bullet_hell_game:
         except Exception:
             pass
         
-        # Bind game-specific keys
-        self.root.bind("<KeyPress>", self.move_player)
+        # Bind game-specific keys (use specific keys to avoid conflicts)
         self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
         self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
+        self.root.bind('<space>', self.player_shoot)
         
         # Initialize game
         self.canvas.delete("all")
@@ -3384,6 +3563,24 @@ class bullet_hell_game:
         self.boomerang_bullets = []
         self.split_bullets = []
         self.static_bullets = []
+        
+        # Initialize player shooting system
+        self.player_shots = []  # [(shot_id, x, y)]
+        self.shot_speed = 12
+        self.shot_cooldown = 0
+        self.shot_cooldown_time = 0.15  # seconds between shots
+        
+        # Initialize boss
+        self.boss_entity = None
+        self.boss_x = self.width // 2
+        self.boss_y = 100
+        self.boss_width = 80
+        self.boss_height = 80
+        self.boss_vx = 3
+        self.boss_vy = 2
+        self.boss_health_display = 0  # Visual "damage" counter
+        self.boss_flash_timer = 0
+        self.spawn_boss()
         
         # Initialize static trap state
         self.static_trap_active = False
@@ -3447,6 +3644,7 @@ class bullet_hell_game:
         self.timecount = self.canvas.create_text(self.width-70, 20, text=f"Time: {self.timee}", fill="white", font=("Arial", 16))
         self.dialog = self.canvas.create_text(self.width//2, 20, text=self.dial, fill="white", font=("Arial", 20), justify="center")
         self.next_unlock_text = self.canvas.create_text(self.width//2, self.height-8, text="", fill="#88ddff", font=("Arial", 16), anchor='s')
+        self.boss_damage_text = self.canvas.create_text(self.width-70, 50, text=f"Boss Hits: {self.boss_health_display}", fill="#ff00ff", font=("Arial", 16))
         
         self.lives = 3
         self.health_icon_items = []
