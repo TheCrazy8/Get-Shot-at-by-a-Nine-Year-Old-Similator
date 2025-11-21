@@ -9,8 +9,11 @@ import ctypes
 from collections import deque
 try:
     import pyi_splash
+    # Disable on macOS due to incompatibilities
+    if sys.platform == 'darwin':
+        pyi_splash = None
 except Exception:
-    pass
+    pyi_splash = None
 # Ensure Windows uses our own taskbar group and icon
 try:
     # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
@@ -29,7 +32,8 @@ _tau = getattr(math, 'tau', 2 * math.pi)
 class bullet_hell_game:
     def __init__(self, root, bg_color_interval=6):
         # Initialize pygame mixer and play music
-        pyi_splash.update_text("Loading...")
+        if pyi_splash is not None:
+            pyi_splash.update_text("Loading...")
         pygame.init()
         pygame.mixer.init()
         self._game_over_loop_pending = False
@@ -306,7 +310,8 @@ class bullet_hell_game:
             "Useless files have been purged"
         ]
         self.selected_game_over_message = None
-        pyi_splash.close()
+        if pyi_splash is not None:
+            pyi_splash.close()
         self.update_game()
 
     def _resolve_asset_path(self, filename: str) -> str:

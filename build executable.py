@@ -22,15 +22,22 @@ def build():
 	]
 	# Note: Python source modules (config.py, resources.py) are bundled automatically.
 	# Explicit --add-data ensures non-Python assets are accessible to resource_path().
-	PyInstaller.__main__.run([
+	
+	# Build PyInstaller args
+	pyinstaller_args = [
 		'Rift of Memories and Regrets.py',
 		*[f'--add-data={d}' for d in data_args],
 		'--onefile',
 		'--windowed',
 		'--icon=icon3.ico',
-		'--splash=icon3.png',
 		'--name=RiftOfMemories'
-	])
+	]
+	
+	# Add splash screen only on non-macOS platforms (incompatibility on macOS)
+	if sys.platform != 'darwin':
+		pyinstaller_args.append('--splash=icon3.png')
+	
+	PyInstaller.__main__.run(pyinstaller_args)
 
 if __name__ == '__main__':
 	build()
