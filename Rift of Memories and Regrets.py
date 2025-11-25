@@ -50,7 +50,7 @@ class bullet_hell_game:
             'sfx_volume': 1.0,
             'difficulty_multiplier': 1.0,
             'bg_color_interval': bg_color_interval,
-            'player_speed': 15
+            'player_speed': 15,
             'unlock_times': {
             'vertical': 0,
             'horizontal': 8,
