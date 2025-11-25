@@ -9,6 +9,13 @@ build/
 dist/
 *.spec
 
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
 # OS-specific files
 .DS_Store
 Thumbs.db
