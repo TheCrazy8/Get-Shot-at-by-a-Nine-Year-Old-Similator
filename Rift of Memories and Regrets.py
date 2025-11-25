@@ -14,12 +14,13 @@ try:
         pyi_splash = None
 except Exception:
     pyi_splash = None
-# Ensure Windows uses our own taskbar group and icon
-try:
-    # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TheCrazy8.RiftOfMemoriesAndRegrets")
-except Exception:
-    pass
+if sys.platform == 'win32':
+    # Ensure Windows uses our own taskbar group and icon
+    try:
+        # Set a stable AppUserModelID so Windows groups the app correctly and uses the exe icon
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TheCrazy8.RiftOfMemoriesAndRegrets")
+    except Exception:
+        pass
 
 # Local math aliases for micro-optimizations (faster local lookups in tight loops)
 _sin = math.sin
