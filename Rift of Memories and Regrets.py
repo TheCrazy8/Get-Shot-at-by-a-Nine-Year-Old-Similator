@@ -4925,12 +4925,8 @@ class bullet_hell_game:
             else:
                 self.canvas.delete(pid)
         self.go_anim_particles = new_particles
-        # Stop after particles gone and some frames passed
-        if self.go_glitch_phase == 2 and self.go_anim_frame > 400:
-            # Stop updating; final blackout stable
-            self.go_anim_active = False
-            return
         # Schedule next frame (decoupled from main game loop which is halted)
+        # This must be called BEFORE any return to ensure music transition and text display continue
         try:
             self._process_game_over_music()
             self.root.after(50, self.update_game_over_animation)
