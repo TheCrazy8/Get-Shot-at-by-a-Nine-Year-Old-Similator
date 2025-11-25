@@ -11,19 +11,22 @@ python run_tests.py
 
 To run a specific test file:
 ```bash
-python -m pytest tests/test_build_executable.py -v
+python -m unittest tests.test_build_executable -v
+```
+
+To run tests with minimal output:
+```bash
+python run_tests.py -q
 ```
 
 ## Test Coverage
 
-- **test_imports.py** - Verifies all required dependencies are installed
-- **test_assets.py** - Checks that all required game assets exist
-- **test_build_executable.py** - Tests the build script configuration and functionality
-- **test_game_functionality.py** - Tests core game mechanics and functions
+- **test_imports.py** - Verifies all required dependencies are installed (7 tests)
+- **test_assets.py** - Checks that all required game assets exist (9 tests)
+- **test_build_executable.py** - Tests the build script configuration and functionality (24 tests)
+- **test_build_integration.py** - End-to-end build process verification (8 tests)
+- **test_game_functionality.py** - Tests core game mechanics and functions (20 tests)
 
 ## Requirements
 
-Tests require pytest:
-```bash
-pip install pytest
-```
+Tests use Python's built-in `unittest` framework - no additional dependencies required beyond what's already in `requirements.txt`.
