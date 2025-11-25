@@ -20,6 +20,7 @@ class TestImports(unittest.TestCase):
         version = pygame.version.ver
         major, minor, _ = map(int, version.split('.'))
         self.assertGreaterEqual(major, 2, "pygame version should be 2.x or higher")
+        # For major version 2, ensure minor is at least 5
         if major == 2:
             self.assertGreaterEqual(minor, 5, "pygame 2.x version should be 2.5 or higher")
 

@@ -44,7 +44,7 @@ def run_tests(verbosity=2):
     print("Test Summary")
     print("=" * 70)
     print(f"Tests run: {result.testsRun}")
-    print(f"Successes: {result.testsRun - len(result.failures) - len(result.errors)}")
+    print(f"Successes: {result.testsRun - len(result.failures) - len(result.errors) - len(result.skipped)}")
     print(f"Failures: {len(result.failures)}")
     print(f"Errors: {len(result.errors)}")
     print(f"Skipped: {len(result.skipped)}")

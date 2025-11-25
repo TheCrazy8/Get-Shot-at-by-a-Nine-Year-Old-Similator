@@ -48,7 +48,7 @@ class TestBuildExecutable(unittest.TestCase):
         """Test that the build script has a __main__ guard."""
         with open(self.build_script_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            self.assertIn('if __name__ == \'__main__\':', content,
+            self.assertIn("if __name__ == '__main__':", content,
                          "Build script should have a main guard")
 
     def test_build_script_includes_all_assets(self):
@@ -116,10 +116,10 @@ class TestBuildExecutable(unittest.TestCase):
             content = f.read()
             self.assertIn('os.name', content,
                          "Build script should check os.name for platform detection")
-            # Check for separator handling
+            # Check for separator variable
             self.assertTrue(
-                ';' in content or 'sep' in content,
-                "Build script should handle path separators"
+                "sep = ';'" in content or "sep = ':'" in content,
+                "Build script should define platform-specific separator"
             )
 
     def test_build_script_handles_macos_splash(self):

@@ -42,21 +42,30 @@ class TestBuildIntegration(unittest.TestCase):
         with open(self.build_script_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Extract data file references from the build script
-        # Look for patterns like "music.mp3", "icon3.ico", etc.
-        import re
-        # Match quoted filenames in the data_args
-        pattern = r'f"([^"]+\.(?:mp3|wav|txt|ico|png))'
-        matches = re.findall(pattern, content)
+        # List of expected asset files that should be included
+        expected_assets = [
+            "music.mp3",
+            "game_0v3r.mp3",
+            "game_0v3r_g0n333333333333.mp3",
+            "lore.txt",
+            "icon3.ico",
+            "icon3.png",
+            "uneasy type beat.wav",
+            "e.mp3",
+            "[UN]Canny.mp3",
+            "PauseLoop.mp3"
+        ]
         
-        for filename in matches:
-            # Remove any format string parts
-            clean_filename = filename.split('{')[0]
-            with self.subTest(file=clean_filename):
-                file_path = self.project_root / clean_filename
+        # Verify each expected asset is mentioned in the build script
+        # and that it exists
+        for asset in expected_assets:
+            with self.subTest(file=asset):
+                self.assertIn(asset, content,
+                            f"Asset {asset} should be referenced in build script")
+                file_path = self.project_root / asset
                 self.assertTrue(
                     file_path.exists(),
-                    f"Referenced file {clean_filename} does not exist"
+                    f"Referenced file {asset} does not exist"
                 )
 
     def test_pyinstaller_arguments_are_valid(self):
