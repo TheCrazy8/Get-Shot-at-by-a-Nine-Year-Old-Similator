@@ -20,7 +20,6 @@ def build():
 		f"icon3.png{sep}.",
 		f"uneasy type beat.wav{sep}.",
 		f"e.mp3{sep}.",
-		f"[UN]Canny.mp3{sep}.",
 		f"PauseLoop.mp3{sep}.",
 	]
 	# Note: Python source modules (config.py, resources.py) are bundled automatically.
@@ -44,4 +43,5 @@ def build():
 
 if __name__ == '__main__':
 	build()
+
 
