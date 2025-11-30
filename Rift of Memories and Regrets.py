@@ -4493,6 +4493,16 @@ class bullet_hell_game:
         self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
         self.root.bind('<space>', self.player_shoot)
         
+        # Bind movement keys (WASD and arrow keys)
+        self.root.bind('<Left>', self.move_player)
+        self.root.bind('<Right>', self.move_player)
+        self.root.bind('<Up>', self.move_player)
+        self.root.bind('<Down>', self.move_player)
+        self.root.bind('w', self.move_player)
+        self.root.bind('a', self.move_player)
+        self.root.bind('s', self.move_player)
+        self.root.bind('d', self.move_player)
+        
         # Initialize game
         self.canvas.delete("all")
         self._initialize_game()
