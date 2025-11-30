@@ -2302,6 +2302,7 @@ class bullet_hell_game:
                 pass
 
     def update_game(self):
+        global pyi_splash
         # Don't update game logic if not in game
         if not self.game_started or self.in_main_menu or self.in_settings_menu:
             return
