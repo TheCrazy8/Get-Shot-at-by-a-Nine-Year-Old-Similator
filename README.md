@@ -11,3 +11,5 @@ Use the source code (other users can run from source: install Python 3.11+, `pip
 ---
 
 **NOTE:** USE THE SOURCE CODE (IF NO supported system) OR ITCH.IO VERSION, AS THOSE ARE THE MAIN VERSIONS
+
+**CREDITS:** Code & Music: TheCrazy8, Art: SeventheSquid
