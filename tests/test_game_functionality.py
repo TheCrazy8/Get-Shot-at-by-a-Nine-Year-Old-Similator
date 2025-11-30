@@ -191,6 +191,27 @@ class TestGameFunctionality(unittest.TestCase):
             found = any(indicator in content.lower() for indicator in movement_indicators)
             self.assertTrue(found, "Game should have player movement")
 
+    def test_game_has_movement_key_bindings(self):
+        """Test that the game binds movement keys (WASD and arrows) to move_player."""
+        with open(self.game_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # Check that movement keys are bound to move_player
+            required_bindings = [
+                ("'<Left>'", "self.move_player"),
+                ("'<Right>'", "self.move_player"),
+                ("'<Up>'", "self.move_player"),
+                ("'<Down>'", "self.move_player"),
+                ("'w'", "self.move_player"),
+                ("'a'", "self.move_player"),
+                ("'s'", "self.move_player"),
+                ("'d'", "self.move_player"),
+            ]
+            for key, handler in required_bindings:
+                with self.subTest(key=key):
+                    # Check that bind(key, handler) exists in some form
+                    self.assertIn(f"bind({key}, {handler})", content,
+                                f"Game should bind {key} to {handler}")
+
     def test_game_file_syntax_valid(self):
         """Test that the game file has valid Python syntax."""
         try:
