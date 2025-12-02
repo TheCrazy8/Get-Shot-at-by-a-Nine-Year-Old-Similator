@@ -1644,14 +1644,26 @@ class bullet_hell_game:
                 
                 # Check buttons for shooting and focus
                 for i in range(joystick.get_numbuttons()):
-                    if joystick.get_button(i):
-                        # Button 0 (usually A/X) for shooting
-                        if i == 0:
-                            self.player_shoot()
-                        # Button 1 (usually B/Circle) for focus
-                        elif i == 1:
-                            if not self.focus_active:
-                                self._focus_key_pressed(None)
+                    button_pressed = joystick.get_button(i)
+                    
+                    # Button 0 (usually A/X) for shooting
+                    if i == 0 and button_pressed:
+                        self.player_shoot()
+                    
+                    # Button 1 (usually B/Circle) for focus (hold to activate)
+                    elif i == 1:
+                        # Track focus button state per controller
+                        focus_key = f'controller_{joystick.get_instance_id()}_focus'
+                        was_pressed = getattr(self, f'_{focus_key}', False)
+                        
+                        if button_pressed and not was_pressed:
+                            # Button just pressed
+                            self._focus_key_pressed(None)
+                            setattr(self, f'_{focus_key}', True)
+                        elif not button_pressed and was_pressed:
+                            # Button just released
+                            self._focus_key_released(None)
+                            setattr(self, f'_{focus_key}', False)
                 
             except Exception as e:
                 print(f"Controller input error: {e}")
