@@ -37,6 +37,27 @@ class bullet_hell_game:
             pyi_splash.update_text("Loading...")
         pygame.init()
         pygame.mixer.init()
+        
+        # Initialize joystick/controller support
+        pygame.joystick.init()
+        self.joysticks = []
+        for i in range(pygame.joystick.get_count()):
+            try:
+                joy = pygame.joystick.Joystick(i)
+                joy.init()
+                self.joysticks.append(joy)
+                print(f"Controller {i} initialized: {joy.get_name()}")
+            except Exception as e:
+                print(f"Failed to initialize controller {i}: {e}")
+        
+        # Mouse and touch tracking
+        self.mouse_target_x = None
+        self.mouse_target_y = None
+        self.mouse_move_active = False
+        self.touch_active = False
+        self.touch_start_x = None
+        self.touch_start_y = None
+        
         self._game_over_loop_pending = False
         self._game_over_music_started = False
         self.main_music_path = self._resolve_asset_path("music.mp3")
@@ -75,6 +96,21 @@ class bullet_hell_game:
             'split': 240,
             'static': 255
         },
+        'keybinds': {
+            'move_left': ['a', 'Left'],
+            'move_right': ['d', 'Right'],
+            'move_up': ['w', 'Up'],
+            'move_down': ['s', 'Down'],
+            'shoot': ['space'],
+            'focus': ['Shift_L'],
+            'pause': ['Escape'],
+            'restart': ['r'],
+            'practice': ['p'],
+            'debug': ['F3']
+        },
+        'mouse_enabled': True,
+        'controller_enabled': True,
+        'touchscreen_enabled': True,
         
         }
         
@@ -152,11 +188,15 @@ class bullet_hell_game:
             "Useless files have been purged"
         ]
         
-        # Bind key handlers that work globally
-        self.root.bind("<Escape>", self.toggle_pause)
-        self.root.bind("r", self.restart_game)
-        self.root.bind("p", self.toggle_practice_mode)
-        self.root.bind('<F3>', self.toggle_debug_hud)
+        # Bind key handlers that work globally using configurable keybinds
+        for key in self.settings['keybinds']['pause']:
+            self.root.bind(f"<{key}>", self.toggle_pause)
+        for key in self.settings['keybinds']['restart']:
+            self.root.bind(key, self.restart_game)
+        for key in self.settings['keybinds']['practice']:
+            self.root.bind(key, self.toggle_practice_mode)
+        for key in self.settings['keybinds']['debug']:
+            self.root.bind(f"<{key}>", self.toggle_debug_hud)
         
         # Debug HUD state
         self.debug_hud_enabled = False
@@ -1467,14 +1507,154 @@ class bullet_hell_game:
             self._handle_static_trap_key(event)
             return
         s = self.player_speed * (0.5 if self.focus_active else 1.0)
-        if event.keysym in ('Left','a'):
+        # Check against configurable keybinds
+        if event.keysym in self.settings['keybinds']['move_left']:
             self.apply_player_move(-s,0)
-        elif event.keysym in ('Right','d'):
+        elif event.keysym in self.settings['keybinds']['move_right']:
             self.apply_player_move(s,0)
-        elif event.keysym in ('Up','w'):
+        elif event.keysym in self.settings['keybinds']['move_up']:
             self.apply_player_move(0,-s)
-        elif event.keysym in ('Down','s'):
+        elif event.keysym in self.settings['keybinds']['move_down']:
             self.apply_player_move(0,s)
+    
+    def handle_mouse_motion(self, event):
+        """Handle mouse movement for player control."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if not self.settings.get('mouse_enabled', True):
+            return
+        if self.paused or self.game_over or self.static_trap_active:
+            return
+        
+        # Set mouse target for smooth movement
+        self.mouse_target_x = event.x
+        self.mouse_target_y = event.y
+        self.mouse_move_active = True
+    
+    def handle_mouse_click(self, event):
+        """Handle mouse click for player movement."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if not self.settings.get('mouse_enabled', True):
+            return
+        if self.paused or self.game_over or self.static_trap_active:
+            return
+        
+        # Move player towards click position
+        self.mouse_target_x = event.x
+        self.mouse_target_y = event.y
+        self.mouse_move_active = True
+    
+    def handle_touch_start(self, event):
+        """Handle touch/tap start for touchscreen movement."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if not self.settings.get('touchscreen_enabled', True):
+            return
+        if self.paused or self.game_over or self.static_trap_active:
+            return
+        
+        self.touch_active = True
+        self.touch_start_x = event.x
+        self.touch_start_y = event.y
+        # Also set as movement target
+        self.mouse_target_x = event.x
+        self.mouse_target_y = event.y
+        self.mouse_move_active = True
+    
+    def handle_touch_move(self, event):
+        """Handle touch drag for player movement."""
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if not self.settings.get('touchscreen_enabled', True):
+            return
+        if self.paused or self.game_over or self.static_trap_active:
+            return
+        if not self.touch_active:
+            return
+        
+        # Update target position during drag
+        self.mouse_target_x = event.x
+        self.mouse_target_y = event.y
+        self.mouse_move_active = True
+    
+    def handle_touch_end(self, event):
+        """Handle touch/tap end."""
+        self.touch_active = False
+        self.touch_start_x = None
+        self.touch_start_y = None
+    
+    def update_mouse_movement(self):
+        """Smoothly move player towards mouse/touch target."""
+        if not self.mouse_move_active or self.mouse_target_x is None:
+            return
+        
+        try:
+            x1, y1, x2, y2 = self.canvas.coords(self.player)
+            player_cx = (x1 + x2) / 2
+            player_cy = (y1 + y2) / 2
+            
+            # Calculate direction to target
+            dx = self.mouse_target_x - player_cx
+            dy = self.mouse_target_y - player_cy
+            distance = _hypot(dx, dy)
+            
+            # If close enough to target, stop
+            if distance < 5:
+                self.mouse_move_active = False
+                return
+            
+            # Normalize and apply speed
+            speed = self.player_speed * (0.5 if self.focus_active else 1.0)
+            if distance > 0:
+                dx = (dx / distance) * speed
+                dy = (dy / distance) * speed
+                self.apply_player_move(dx, dy)
+        except Exception:
+            pass
+    
+    def update_controller_input(self):
+        """Process controller/gamepad input for player movement."""
+        if not self.settings.get('controller_enabled', True):
+            return
+        if not self.game_started or self.in_main_menu or self.in_settings_menu:
+            return
+        if self.paused or self.game_over or self.static_trap_active:
+            return
+        
+        for joystick in self.joysticks:
+            try:
+                # Get axis values (typically axis 0 = left/right, axis 1 = up/down)
+                axis_x = joystick.get_axis(0) if joystick.get_numaxes() > 0 else 0
+                axis_y = joystick.get_axis(1) if joystick.get_numaxes() > 1 else 0
+                
+                # Apply deadzone to avoid drift
+                deadzone = 0.15
+                if abs(axis_x) < deadzone:
+                    axis_x = 0
+                if abs(axis_y) < deadzone:
+                    axis_y = 0
+                
+                # Apply movement if there's input
+                if axis_x != 0 or axis_y != 0:
+                    speed = self.player_speed * (0.5 if self.focus_active else 1.0)
+                    dx = axis_x * speed
+                    dy = axis_y * speed
+                    self.apply_player_move(dx, dy)
+                
+                # Check buttons for shooting and focus
+                for i in range(joystick.get_numbuttons()):
+                    if joystick.get_button(i):
+                        # Button 0 (usually A/X) for shooting
+                        if i == 0:
+                            self.player_shoot()
+                        # Button 1 (usually B/Circle) for focus
+                        elif i == 1:
+                            if not self.focus_active:
+                                self._focus_key_pressed(None)
+                
+            except Exception as e:
+                print(f"Controller input error: {e}")
     
     def player_shoot(self, event=None):
         """Player shoots a projectile upward."""
@@ -2337,12 +2517,15 @@ class bullet_hell_game:
         self._update_focus_charge()
         self._update_focus_visuals()
         
+        # Update input methods
+        self.update_mouse_movement()
+        self.update_controller_input()
+        
         # Update player shots and boss
         self.update_player_shots()
         self.update_boss()
         self.update_collectables()
         
-    # (Removed controller polling)
     # Background animation
         self.update_background()
     # Animate player decorative sprite
@@ -4136,12 +4319,12 @@ class bullet_hell_game:
             button_x + button_width // 2, settings_y + button_height // 2,
             fill="#4455ff", outline="#ffffff", width=3, tags="menu"
         )
-        self.canvas.create_text(
+        self.menu_settings_text1 = self.canvas.create_text(
             button_x + 2, settings_y + 2,
             text="SETTINGS", fill="#001133", font=("Arial", 32, "bold"),
             tags="menu"
         )
-        self.canvas.create_text(
+        self.menu_settings_text2 = self.canvas.create_text(
             button_x, settings_y,
             text="SETTINGS", fill="white", font=("Arial", 32, "bold"),
             tags="menu"
@@ -4181,6 +4364,8 @@ class bullet_hell_game:
         # Bind click events
         self.canvas.tag_bind(self.menu_play_btn, "<Button-1>", lambda e: self.start_game())
         self.canvas.tag_bind(self.menu_settings_btn, "<Button-1>", lambda e: self.show_settings_menu())
+        self.canvas.tag_bind(self.menu_settings_text1, "<Button-1>", lambda e: self.show_settings_menu())
+        self.canvas.tag_bind(self.menu_settings_text2, "<Button-1>", lambda e: self.show_settings_menu())
         self.canvas.tag_bind(self.menu_exit_btn, "<Button-1>", lambda e: self.root.quit())
         
         # Play menu music if available
@@ -4379,31 +4564,63 @@ class bullet_hell_game:
             tags="settings"
         )
         
-        # Back button with glow
-        back_y = self.height - 100
+        # Keybinds button with glow (left side)
+        keybinds_y = self.height - 100
+        keybinds_x = self.width // 2 - 220
         button_width = 200
         button_height = 50
         self.canvas.create_rectangle(
-            self.width // 2 - button_width // 2 - 3, back_y - button_height // 2 - 3,
-            self.width // 2 + button_width // 2 + 3, back_y + button_height // 2 + 3,
+            keybinds_x - button_width // 2 - 3, keybinds_y - button_height // 2 - 3,
+            keybinds_x + button_width // 2 + 3, keybinds_y + button_height // 2 + 3,
+            fill="#ff99ff", outline="", tags="settings"
+        )
+        self.settings_keybinds_btn = self.canvas.create_rectangle(
+            keybinds_x - button_width // 2, keybinds_y - button_height // 2,
+            keybinds_x + button_width // 2, keybinds_y + button_height // 2,
+            fill="#ff55ff", outline="#ffffff", width=3, tags="settings"
+        )
+        keybinds_text1 = self.canvas.create_text(
+            keybinds_x + 2, keybinds_y + 2,
+            text="KEYBINDS", fill="#330033", font=("Arial", 20, "bold"),
+            tags="settings"
+        )
+        keybinds_text2 = self.canvas.create_text(
+            keybinds_x, keybinds_y,
+            text="KEYBINDS", fill="white", font=("Arial", 20, "bold"),
+            tags="settings"
+        )
+        
+        # Back button with glow (right side)
+        back_y = self.height - 100
+        back_x = self.width // 2 + 220
+        self.canvas.create_rectangle(
+            back_x - button_width // 2 - 3, back_y - button_height // 2 - 3,
+            back_x + button_width // 2 + 3, back_y + button_height // 2 + 3,
             fill="#6677ff", outline="", tags="settings"
         )
         self.settings_back_btn = self.canvas.create_rectangle(
-            self.width // 2 - button_width // 2, back_y - button_height // 2,
-            self.width // 2 + button_width // 2, back_y + button_height // 2,
+            back_x - button_width // 2, back_y - button_height // 2,
+            back_x + button_width // 2, back_y + button_height // 2,
             fill="#4455ff", outline="#ffffff", width=3, tags="settings"
         )
-        self.canvas.create_text(
-            self.width // 2 + 2, back_y + 2,
+        back_text1 = self.canvas.create_text(
+            back_x + 2, back_y + 2,
             text="BACK", fill="#001133", font=("Arial", 24, "bold"),
             tags="settings"
         )
-        self.canvas.create_text(
-            self.width // 2, back_y,
+        back_text2 = self.canvas.create_text(
+            back_x, back_y,
             text="BACK", fill="white", font=("Arial", 24, "bold"),
             tags="settings"
         )
+        
+        # Bind click events for buttons and their text
+        self.canvas.tag_bind(self.settings_keybinds_btn, "<Button-1>", lambda e: self.show_keybinds_menu())
+        self.canvas.tag_bind(keybinds_text1, "<Button-1>", lambda e: self.show_keybinds_menu())
+        self.canvas.tag_bind(keybinds_text2, "<Button-1>", lambda e: self.show_keybinds_menu())
         self.canvas.tag_bind(self.settings_back_btn, "<Button-1>", lambda e: self.show_main_menu())
+        self.canvas.tag_bind(back_text1, "<Button-1>", lambda e: self.show_main_menu())
+        self.canvas.tag_bind(back_text2, "<Button-1>", lambda e: self.show_main_menu())
         
         # Bind keys for settings adjustment
         self.settings_selected = None
@@ -4450,6 +4667,182 @@ class bullet_hell_game:
             self.canvas.itemconfig(self.settings_speed_text, text=str(self.settings['player_speed']))
             self.player_speed = self.settings['player_speed']
     
+    def show_keybinds_menu(self):
+        """Display the keybinds configuration menu."""
+        self.in_settings_menu = True
+        self.canvas.delete("all")
+        
+        # Decorative background
+        gradient_colors = ["#0d0221", "#1a0533", "#32054e"]
+        bar_height = self.height // len(gradient_colors)
+        for i, color in enumerate(gradient_colors):
+            self.canvas.create_rectangle(
+                0, i * bar_height, self.width, (i + 1) * bar_height,
+                fill=color, outline="", tags="keybinds"
+            )
+        
+        # Title
+        self.canvas.create_text(
+            self.width // 2 + 3, 83,
+            text="KEYBINDS",
+            fill="#113355", font=("Arial", 48, "bold"),
+            tags="keybinds"
+        )
+        self.canvas.create_text(
+            self.width // 2, 80,
+            text="KEYBINDS",
+            fill="#ff55ff", font=("Arial", 48, "bold"),
+            tags="keybinds"
+        )
+        
+        # Panel background
+        panel_x = self.width // 2 - 400
+        panel_y = 140
+        panel_width = 800
+        panel_height = 450
+        self.canvas.create_rectangle(
+            panel_x + 5, panel_y + 5, panel_x + panel_width + 5, panel_y + panel_height + 5,
+            fill="#000000", outline="", tags="keybinds"
+        )
+        self.canvas.create_rectangle(
+            panel_x, panel_y, panel_x + panel_width, panel_y + panel_height,
+            fill="#1a0533", outline="#ff55ff", width=3, tags="keybinds"
+        )
+        
+        # Keybind list
+        y_pos = 180
+        y_spacing = 45
+        label_x = self.width // 2 - 300
+        value_x = self.width // 2 + 200
+        
+        keybind_labels = {
+            'move_left': '← Move Left',
+            'move_right': '→ Move Right',
+            'move_up': '↑ Move Up',
+            'move_down': '↓ Move Down',
+            'shoot': '⚡ Shoot',
+            'focus': '◉ Focus',
+            'pause': '⏸ Pause',
+            'restart': '↻ Restart',
+            'practice': '⚙ Practice',
+            'debug': '🔧 Debug'
+        }
+        
+        self.keybind_text_items = {}
+        
+        for action, label in keybind_labels.items():
+            # Label
+            self.canvas.create_text(
+                label_x, y_pos,
+                text=label, fill="#88ffff", font=("Arial", 18, "bold"),
+                anchor="w", tags="keybinds"
+            )
+            
+            # Current keybinds
+            keys_str = ', '.join(self.settings['keybinds'][action])
+            text_id = self.canvas.create_text(
+                value_x, y_pos,
+                text=keys_str, fill="#ffff66", font=("Arial", 18, "bold"),
+                anchor="e", tags="keybinds"
+            )
+            self.keybind_text_items[action] = text_id
+            
+            y_pos += y_spacing
+        
+        # Instructions
+        inst_y = panel_y + panel_height - 70
+        self.canvas.create_text(
+            self.width // 2, inst_y,
+            text="Click on an action's keys to rebind  •  Press ESC in rebind mode to cancel",
+            fill="#aaaaaa", font=("Arial", 14),
+            justify="center", tags="keybinds"
+        )
+        self.canvas.create_text(
+            self.width // 2, inst_y + 25,
+            text="Multiple keys per action supported  •  Press + to add, - to remove",
+            fill="#888888", font=("Arial", 12),
+            justify="center", tags="keybinds"
+        )
+        
+        # Input method toggles
+        toggle_y = inst_y + 55
+        toggle_x_start = self.width // 2 - 300
+        
+        # Mouse toggle
+        mouse_status = "ON" if self.settings.get('mouse_enabled', True) else "OFF"
+        mouse_color = "#44ff44" if self.settings.get('mouse_enabled', True) else "#ff4444"
+        self.canvas.create_text(
+            toggle_x_start, toggle_y,
+            text=f"🖱 Mouse: {mouse_status}", fill=mouse_color, font=("Arial", 14, "bold"),
+            tags="keybinds"
+        )
+        
+        # Controller toggle
+        controller_status = "ON" if self.settings.get('controller_enabled', True) else "OFF"
+        controller_color = "#44ff44" if self.settings.get('controller_enabled', True) else "#ff4444"
+        self.canvas.create_text(
+            toggle_x_start + 200, toggle_y,
+            text=f"🎮 Controller: {controller_status}", fill=controller_color, font=("Arial", 14, "bold"),
+            tags="keybinds"
+        )
+        
+        # Touch toggle
+        touch_status = "ON" if self.settings.get('touchscreen_enabled', True) else "OFF"
+        touch_color = "#44ff44" if self.settings.get('touchscreen_enabled', True) else "#ff4444"
+        self.canvas.create_text(
+            toggle_x_start + 420, toggle_y,
+            text=f"👆 Touch: {touch_status}", fill=touch_color, font=("Arial", 14, "bold"),
+            tags="keybinds"
+        )
+        
+        # Back button
+        back_y = self.height - 100
+        button_width = 200
+        button_height = 50
+        self.canvas.create_rectangle(
+            self.width // 2 - button_width // 2 - 3, back_y - button_height // 2 - 3,
+            self.width // 2 + button_width // 2 + 3, back_y + button_height // 2 + 3,
+            fill="#6677ff", outline="", tags="keybinds"
+        )
+        self.keybinds_back_btn = self.canvas.create_rectangle(
+            self.width // 2 - button_width // 2, back_y - button_height // 2,
+            self.width // 2 + button_width // 2, back_y + button_height // 2,
+            fill="#4455ff", outline="#ffffff", width=3, tags="keybinds"
+        )
+        kb_back_text1 = self.canvas.create_text(
+            self.width // 2 + 2, back_y + 2,
+            text="BACK", fill="#001133", font=("Arial", 24, "bold"),
+            tags="keybinds"
+        )
+        kb_back_text2 = self.canvas.create_text(
+            self.width // 2, back_y,
+            text="BACK", fill="white", font=("Arial", 24, "bold"),
+            tags="keybinds"
+        )
+        
+        # Bind click events for button and its text
+        self.canvas.tag_bind(self.keybinds_back_btn, "<Button-1>", lambda e: self.show_settings_menu())
+        self.canvas.tag_bind(kb_back_text1, "<Button-1>", lambda e: self.show_settings_menu())
+        self.canvas.tag_bind(kb_back_text2, "<Button-1>", lambda e: self.show_settings_menu())
+        
+        # Bind keys for toggling input methods
+        self.root.bind('m', lambda e: self.toggle_input_method('mouse'))
+        self.root.bind('c', lambda e: self.toggle_input_method('controller'))
+        self.root.bind('t', lambda e: self.toggle_input_method('touchscreen'))
+    
+    def toggle_input_method(self, method):
+        """Toggle an input method on/off."""
+        if method == 'mouse':
+            self.settings['mouse_enabled'] = not self.settings.get('mouse_enabled', True)
+        elif method == 'controller':
+            self.settings['controller_enabled'] = not self.settings.get('controller_enabled', True)
+        elif method == 'touchscreen':
+            self.settings['touchscreen_enabled'] = not self.settings.get('touchscreen_enabled', True)
+        
+        # Refresh the keybinds menu to show updated status
+        self.show_keybinds_menu()
+    
+    
     def apply_volume_settings(self):
         """Apply volume settings to music."""
         try:
@@ -4488,20 +4881,37 @@ class bullet_hell_game:
         except Exception:
             pass
         
-        # Bind game-specific keys (use specific keys to avoid conflicts)
-        self.root.bind('<KeyPress-Shift_L>', self._focus_key_pressed)
-        self.root.bind('<KeyRelease-Shift_L>', self._focus_key_released)
-        self.root.bind('<space>', self.player_shoot)
+        # Bind game-specific keys using configurable keybinds
+        for key in self.settings['keybinds']['focus']:
+            self.root.bind(f'<KeyPress-{key}>', self._focus_key_pressed)
+            self.root.bind(f'<KeyRelease-{key}>', self._focus_key_released)
         
-        # Bind movement keys (WASD and arrow keys)
-        self.root.bind('<Left>', self.move_player)
-        self.root.bind('<Right>', self.move_player)
-        self.root.bind('<Up>', self.move_player)
-        self.root.bind('<Down>', self.move_player)
-        self.root.bind('w', self.move_player)
-        self.root.bind('a', self.move_player)
-        self.root.bind('s', self.move_player)
-        self.root.bind('d', self.move_player)
+        for key in self.settings['keybinds']['shoot']:
+            self.root.bind(f'<{key}>', self.player_shoot)
+        
+        # Bind movement keys using configurable keybinds
+        all_move_keys = (
+            self.settings['keybinds']['move_left'] +
+            self.settings['keybinds']['move_right'] +
+            self.settings['keybinds']['move_up'] +
+            self.settings['keybinds']['move_down']
+        )
+        for key in all_move_keys:
+            if len(key) > 1:  # Special keys like 'Left', 'Right'
+                self.root.bind(f'<{key}>', self.move_player)
+            else:  # Single character keys
+                self.root.bind(key, self.move_player)
+        
+        # Bind mouse events for mouse-based movement
+        if self.settings.get('mouse_enabled', True):
+            self.canvas.bind('<Motion>', self.handle_mouse_motion)
+            self.canvas.bind('<Button-1>', self.handle_mouse_click)
+        
+        # Bind touch events for touchscreen support
+        if self.settings.get('touchscreen_enabled', True):
+            self.canvas.bind('<ButtonPress-1>', self.handle_touch_start)
+            self.canvas.bind('<B1-Motion>', self.handle_touch_move)
+            self.canvas.bind('<ButtonRelease-1>', self.handle_touch_end)
         
         # Initialize game
         self.canvas.delete("all")
