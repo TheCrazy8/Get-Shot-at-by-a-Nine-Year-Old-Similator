@@ -10,7 +10,39 @@ permissions:
   contents: write  # needed to create / update releases
 
 jobs:
+  generate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.set-tag.outputs.release_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate and set release tag
+        id: set-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Generate random 8-character hex tag
+            RANDOM_TAG="release-$(openssl rand -hex 4)"
+            echo "release_tag=$RANDOM_TAG" >> $GITHUB_OUTPUT
+            echo "Generated random tag: $RANDOM_TAG"
+          else
+            # Use the pushed tag
+            echo "release_tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "Using pushed tag: ${{ github.ref_name }}"
+          fi
+
+      - name: Create and push tag (if workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.set-tag.outputs.release_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Automated release $TAG"
+          git push origin "$TAG"
+
   build-windows-exe:
+    needs: generate-tag
     runs-on: windows-latest
     defaults:
       run:
@@ -37,7 +69,7 @@ jobs:
       - name: Rename artifact with version
         id: rename
         run: |
-          $tag = '${{ github.ref_name }}'
+          $tag = '${{ needs.generate-tag.outputs.release_tag }}'
           $dest = "RiftOfMemoriesAndRegrets.exe"
           Copy-Item dist/RiftOfMemories.exe $dest
           echo "artifact_name=$dest" >> $env:GITHUB_OUTPUT
@@ -53,14 +85,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.rename.outputs.artifact_name }}
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.generate-tag.outputs.release_tag }}
+          tag_name: ${{ needs.generate-tag.outputs.release_tag }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux-binary:
+    needs: generate-tag
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -84,7 +117,7 @@ jobs:
       - name: Rename artifact with version
         id: rename
         run: |
-          tag="${{ github.ref_name }}"
+          tag="${{ needs.generate-tag.outputs.release_tag }}"
           dest="RiftOfMemoriesAndRegrets"
           cp dist/RiftOfMemories "$dest"
           chmod +x "$dest"
@@ -101,14 +134,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.rename.outputs.artifact_name }}
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.generate-tag.outputs.release_tag }}
+          tag_name: ${{ needs.generate-tag.outputs.release_tag }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-app:
+    needs: generate-tag
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -133,7 +167,7 @@ jobs:
       - name: Rename artifact with version
         id: rename
         run: |
-          tag="${{ github.ref_name }}"
+          tag="${{ needs.generate-tag.outputs.release_tag }}"
           dest="RiftOfMemoriesAndRegretsMAC"
           cp dist/RiftOfMemories "$dest"
           chmod +x "$dest"
@@ -150,12 +184,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.rename.outputs.artifact_name }}
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.generate-tag.outputs.release_tag }}
+          tag_name: ${{ needs.generate-tag.outputs.release_tag }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-
